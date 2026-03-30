@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  avatar    String?
+  bio       String?
+  role      RoleType @default(USER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts    Post[]
+  comments Comment[]
+  likes    Like[]
+
+  followers Follow[] @relation("followers")
+  following Follow[] @relation("following")
+
+  // ✅ Thêm relation ngược cho Notification
+  notifications     Notification[] @relation("NotificationReceiver")
+  sentNotifications Notification[] @relation("NotificationSender")
+
+  // ✅ Thêm relation ngược cho ModerationLog
+  moderationLogs      ModerationLog[] @relation("ModeratorLogs")
+  authorModerationLogs ModerationLog[] @relation("AuthorModerationLogs")
+
+  aiHistories AIHistory[]
+}
+
+model Post {
+  id        String         @id @default(uuid())
+  content   String
+  imageUrl  String?
+  status    PostStatus     @default(ACTIVE)
+  sentiment SentimentType?
+  authorId  String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  author     User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments   Comment[]
+  likes      Like[]
+  moderation ModerationLog?
+
+  @@index([authorId])
+  @@index([createdAt(sort: Desc)])
+  @@index([status])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  postId    String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([authorId])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("following", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("followers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  type      NotificationType
+  message   String
+  userId    String
+  senderId  String?
+  postId    String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user   User  @relation("NotificationReceiver", fields: [userId], references: [id], onDelete: Cascade)
+  sender User? @relation("NotificationSender", fields: [senderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@index([createdAt(sort: Desc)])
+}
+
+model ModerationLog {
+  id          String           @id @default(uuid())
+  postId      String?          @unique
+  moderatorId String
+  authorId    String
+  content     String
+  result      ModerationResult
+  reason      String?
+  createdAt   DateTime         @default(now())
+
+  post      Post? @relation(fields: [postId], references: [id], onDelete: SetNull)
+  moderator User  @relation("ModeratorLogs", fields: [moderatorId], references: [id])
+  author    User  @relation("AuthorModerationLogs", fields: [authorId], references: [id])
+
+  @@index([authorId])
+  @@index([result])
+}
+
+model AIHistory {
+  id        String   @id @default(uuid())
+  userId    String
+  prompt    String
+  response  String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
+}
+
+enum RoleType {
+  USER
+  ADMIN
+}
+
+enum PostStatus {
+  ACTIVE
+  HIDDEN
+  BLOCKED
+}
+
+enum ModerationResult {
+  SAFE
+  WARNING
+  BLOCKED
+}
+
+enum SentimentType {
+  POSITIVE
+  NEGATIVE
+  NEUTRAL
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  WARNING
+}
