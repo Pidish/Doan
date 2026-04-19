@@ -84,70 +84,70 @@ export default function ProfilePage() {
   return (
     <main className="flex-1 min-h-screen bg-gray-50">
 
-    {/* Cover */}
-<div className="h-48 md:h-56 w-full bg-gradient-to-br from-teal-400 via-emerald-500 to-emerald-700 relative overflow-hidden">
-  <div className="absolute inset-0 opacity-20"
-    style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, white 0%, transparent 50%), radial-gradient(circle at 80% 20%, white 0%, transparent 50%)' }}
-  />
-</div>
-
-{/* Profile Info Card */}
-<div className="max-w-5xl mx-auto px-6">
-  <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 pt-0 pb-6 -mt-6 relative">
-
-    {/* Avatar + Name + Buttons — nằm cùng hàng */}
-    <div className="flex flex-col md:flex-row md:items-end gap-4 -mt-12 mb-6">
-      {/* Avatar */}
-      <div className="w-24 h-24 rounded-full border-4 border-white bg-white overflow-hidden shadow-lg flex-shrink-0">
-        <img
-          src={user.avatar || `https://i.pravatar.cc/160?u=${user.id}`}
-          alt="Avatar"
-          className="w-full h-full object-cover"
+      {/* Cover */}
+      <div className="h-48 md:h-56 w-full bg-gradient-to-br from-teal-400 via-emerald-500 to-emerald-700 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-20"
+          style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, white 0%, transparent 50%), radial-gradient(circle at 80% 20%, white 0%, transparent 50%)' }}
         />
       </div>
 
-      {/* Name + Buttons */}
-      <div className="flex-1 flex flex-col md:flex-row justify-between md:items-center gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">{user.name}</h2>
-          <p className="text-gray-400 text-sm">@{user.email.split('@')[0]}</p>
+      {/* Profile Info Card */}
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-8 pt-0 pb-6 -mt-6 relative">
+
+          {/* Avatar + Name + Buttons — nằm cùng hàng */}
+          <div className="flex flex-col md:flex-row md:items-end gap-4 -mt-12 mb-6">
+            {/* Avatar */}
+            <div className="w-24 h-24 rounded-full border-4 border-white bg-white overflow-hidden shadow-lg flex-shrink-0">
+              <img
+                src={user.avatar || `https://i.pravatar.cc/160?u=${user.id}`}
+                alt="Avatar"
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            {/* Name + Buttons */}
+            <div className="flex-1 flex flex-col md:flex-row justify-between md:items-center gap-3">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">{user.name}</h2>
+                <p className="text-gray-400 text-sm">@{user.email.split('@')[0]}</p>
+              </div>
+              <div className="flex gap-3">
+                <button className="px-5 py-2 rounded-full bg-white text-gray-700 font-semibold text-sm border border-gray-200 hover:shadow-md transition-all">
+                  Chỉnh sửa hồ sơ
+                </button>
+                <button className="px-5 py-2 rounded-full bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-all flex items-center gap-2">
+                  <Share2 className="w-4 h-4" /> Chia sẻ
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Bio */}
+          {user.bio && (
+            <p className="text-gray-600 text-sm leading-relaxed mb-4 max-w-2xl">{user.bio}</p>
+          )}
+
+          {/* Meta */}
+          <div className="flex flex-wrap gap-4 text-gray-400 text-sm mb-4">
+            <span className="flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-emerald-500" /> Hà Nội, Việt Nam
+            </span>
+            <span className="flex items-center gap-1.5">
+              <LinkIcon className="w-4 h-4 text-emerald-500" /> nexora.com/{user.email.split('@')[0]}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-emerald-500" />
+              Tham gia {new Date(user.createdAt).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
+            </span>
+          </div>
+
+          {/* Stats */}
+          <div className="flex gap-6 text-sm">
+            <span className="font-bold text-gray-900">{user._count.following} <span className="font-normal text-gray-400">Đang theo dõi</span></span>
+            <span className="font-bold text-gray-900">{user._count.followers} <span className="font-normal text-gray-400">Người theo dõi</span></span>
+          </div>
         </div>
-        <div className="flex gap-3">
-          <button className="px-5 py-2 rounded-full bg-white text-gray-700 font-semibold text-sm border border-gray-200 hover:shadow-md transition-all">
-            Chỉnh sửa hồ sơ
-          </button>
-          <button className="px-5 py-2 rounded-full bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-all flex items-center gap-2">
-            <Share2 className="w-4 h-4" /> Chia sẻ
-          </button>
-        </div>
-      </div>
-    </div>
-
-    {/* Bio */}
-    {user.bio && (
-      <p className="text-gray-600 text-sm leading-relaxed mb-4 max-w-2xl">{user.bio}</p>
-    )}
-
-    {/* Meta */}
-    <div className="flex flex-wrap gap-4 text-gray-400 text-sm mb-4">
-      <span className="flex items-center gap-1.5">
-        <MapPin className="w-4 h-4 text-emerald-500" /> Hà Nội, Việt Nam
-      </span>
-      <span className="flex items-center gap-1.5">
-        <LinkIcon className="w-4 h-4 text-emerald-500" /> nexora.com/{user.email.split('@')[0]}
-      </span>
-      <span className="flex items-center gap-1.5">
-        <Calendar className="w-4 h-4 text-emerald-500" />
-        Tham gia {new Date(user.createdAt).toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
-      </span>
-    </div>
-
-    {/* Stats */}
-    <div className="flex gap-6 text-sm">
-      <span className="font-bold text-gray-900">{user._count.following} <span className="font-normal text-gray-400">Đang theo dõi</span></span>
-      <span className="font-bold text-gray-900">{user._count.followers} <span className="font-normal text-gray-400">Người theo dõi</span></span>
-    </div>
-  </div>
 
         {/* Tabs + Content */}
         <div className="mt-6 flex gap-6">
@@ -166,11 +166,10 @@ export default function ProfilePage() {
                   <button
                     key={tab.key}
                     onClick={() => setActiveTab(tab.key)}
-                    className={`py-4 text-sm font-semibold border-b-2 transition-colors ${
-                      activeTab === tab.key
-                        ? 'border-emerald-600 text-emerald-700'
-                        : 'border-transparent text-gray-400 hover:text-gray-600'
-                    }`}
+                    className={`py-4 text-sm font-semibold border-b-2 transition-colors ${activeTab === tab.key
+                      ? 'border-emerald-600 text-emerald-700'
+                      : 'border-transparent text-gray-400 hover:text-gray-600'
+                      }`}
                   >
                     {tab.label}
                   </button>
