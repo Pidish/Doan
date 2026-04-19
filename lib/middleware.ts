@@ -48,5 +48,7 @@ export const config = {
     "/api/comments/:path*",
     "/api/feed/:path*",
     "/api/me/:path*",
+    "/api/messages/:path*",
+    "/api/admin/:path*",
   ],
 };

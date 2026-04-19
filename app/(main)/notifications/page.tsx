@@ -1,121 +1,229 @@
 'use client'
 
-import { Bell, UserPlus, Heart, AtSign } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Bell, UserPlus, Heart, AtSign, Loader2, Check } from 'lucide-react'
 import { motion } from 'framer-motion'
 
+interface Notification {
+  id: string
+  type: 'LIKE' | 'COMMENT' | 'FOLLOW' | 'WARNING'
+  message: string
+  isRead: boolean
+  createdAt: string
+  postId?: string
+  sender?: {
+    id: string
+    name: string
+    avatar?: string
+  }
+}
+
 export default function NotificationsPage() {
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [loading, setLoading] = useState(true)
+  const [activeFilter, setActiveFilter] = useState('all')
+  const [unreadCount, setUnreadCount] = useState(0)
+
   const filters = [
-    { icon: Bell, label: 'Tất cả', count: 12, active: true },
-    { icon: AtSign, label: 'Nhắc đến', count: 3 },
-    { icon: Heart, label: 'Lượt thích', count: 5 },
-    { icon: UserPlus, label: 'Người theo dõi mới', count: 4 },
+    { key: 'all', icon: Bell, label: 'Tất cả' },
+    { key: 'FOLLOW', icon: UserPlus, label: 'Theo dõi' },
+    { key: 'LIKE', icon: Heart, label: 'Lượt thích' },
+    { key: 'COMMENT', icon: AtSign, label: 'Bình luận' },
   ]
 
+  useEffect(() => {
+    fetchNotifications()
+  }, [])
+
+  const fetchNotifications = async () => {
+    const token = localStorage.getItem('accessToken')
+    if (!token) return
+
+    try {
+      const res = await fetch('/api/notifications', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      const data = await res.json()
+      setNotifications(data.data || [])
+      setUnreadCount(data.unreadCount || 0)
+    } catch (err) {
+      console.error('Error:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const markAsRead = async (id: string) => {
+    const token = localStorage.getItem('accessToken')
+    await fetch(`/api/notifications/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, isRead: true } : n)
+    )
+    setUnreadCount(prev => Math.max(0, prev - 1))
+  }
+
+  const markAllRead = async () => {
+    const token = localStorage.getItem('accessToken')
+    await fetch('/api/notifications/read-all', {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+    setUnreadCount(0)
+  }
+
+  const getIcon = (type: string) => {
+    switch (type) {
+      case 'FOLLOW': return <UserPlus className="w-4 h-4" />
+      case 'LIKE': return <Heart className="w-4 h-4 fill-current" />
+      case 'COMMENT': return <AtSign className="w-4 h-4" />
+      default: return <Bell className="w-4 h-4" />
+    }
+  }
+
+  const getIconBg = (type: string) => {
+    switch (type) {
+      case 'FOLLOW': return 'bg-emerald-600 text-white'
+      case 'LIKE': return 'bg-rose-500 text-white'
+      case 'COMMENT': return 'bg-blue-500 text-white'
+      default: return 'bg-gray-500 text-white'
+    }
+  }
+
+  const timeAgo = (date: string) => {
+    const diff = Date.now() - new Date(date).getTime()
+    const mins = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
+    if (mins < 60) return `${mins} phút trước`
+    if (hours < 24) return `${hours} giờ trước`
+    return `${days} ngày trước`
+  }
+
+  const filtered = activeFilter === 'all'
+    ? notifications
+    : notifications.filter(n => n.type === activeFilter)
+
   return (
-    <div className="flex flex-col lg:flex-row gap-8 p-6 md:p-10 pt-24 md:pt-10">
+    <div className="flex flex-col lg:flex-row gap-6 p-6 md:p-10 bg-gray-50 min-h-screen">
+
       {/* Filter Sidebar */}
-      <div className="lg:w-1/3 space-y-6">
-        <section className="bg-emerald-50 rounded-2xl p-6 sticky top-28">
-          <h3 className="text-lg font-bold text-emerald-900 mb-6">Bộ lọc thông báo</h3>
-          <nav className="flex flex-col gap-2">
+      <div className="lg:w-72 flex-shrink-0">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sticky top-6">
+          <h3 className="font-bold text-gray-900 mb-4">Bộ lọc</h3>
+          <nav className="flex flex-col gap-1">
             {filters.map((f) => (
               <button
-                key={f.label}
-                className={`flex items-center justify-between px-6 py-4 rounded-2xl transition-all hover:translate-x-1 ${
-                  f.active
-                    ? 'bg-white text-emerald-900 shadow-sm font-semibold'
-                    : 'text-emerald-800/70 hover:bg-white/40'
+                key={f.key}
+                onClick={() => setActiveFilter(f.key)}
+                className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all ${
+                  activeFilter === f.key
+                    ? 'bg-emerald-50 text-emerald-700 font-semibold'
+                    : 'text-gray-500 hover:bg-gray-50'
                 }`}
               >
                 <span className="flex items-center gap-3">
-                  <f.icon className={`w-5 h-5 ${f.active ? 'text-emerald-600' : ''}`} />
+                  <f.icon className="w-5 h-5" />
                   {f.label}
                 </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full ${
-                  f.active ? 'bg-emerald-700 text-white' : 'border border-emerald-800/20'
-                }`}>
-                  {f.count}
-                </span>
+                {f.key === 'all' && unreadCount > 0 && (
+                  <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                    {unreadCount}
+                  </span>
+                )}
               </button>
             ))}
           </nav>
-          <div className="mt-10 p-5 bg-emerald-100/50 rounded-2xl border border-emerald-200/50">
-            <p className="text-xs font-bold text-emerald-900 mb-1">Mẹo nhỏ</p>
-            <p className="text-xs text-emerald-800 leading-relaxed">
-              Bạn có thể tùy chỉnh thông báo đẩy trong phần{' '}
-              <a href="#" className="underline font-bold">Cài đặt</a>{' '}
-              để có trải nghiệm yên tĩnh hơn.
+
+          <div className="mt-6 pt-6 border-t border-gray-100">
+            <p className="text-xs text-gray-400 mb-3">Mẹo nhỏ</p>
+            <p className="text-xs text-gray-500 leading-relaxed">
+              Tùy chỉnh thông báo đẩy trong{' '}
+              <a href="/settings" className="text-emerald-600 font-semibold hover:underline">Cài đặt</a>
             </p>
           </div>
-        </section>
+        </div>
       </div>
 
       {/* Notifications List */}
-      <div className="lg:w-2/3 flex flex-col gap-10">
-        <h2 className="text-2xl font-bold tracking-tight text-emerald-900">Thông báo</h2>
+      <div className="flex-1">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
 
-        <div className="space-y-10">
-          {/* Follow notification */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-start gap-6"
-          >
-            <div className="relative">
-              <img
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8aedGeFp2R0oUVPqcoNp9_TxdwvPfI5s9MeqSWUun2rFLkLfpFgZ9yonFPQr0hTq2fsa9aiSFFHnUuTjwReMnzqtQqkMiwIVSv0t575X_Tc5LQmNbkWDfMKPByB72_ehlFxxgA23dzHZCyZt91lzoo_oBUQaVcHk4lj7GThVI_nlucsx2-Xi9d-wBjdEQUqD7USs8G1ngvkzOlvFOFmQJ_G87oSOwwkpN6y9aiP47JuuvYulMYqVJrGb7zC-stqaRTmI45hNofOi_"
-                alt="User"
-                className="w-14 h-14 rounded-full border-2 border-white shadow-sm"
-              />
-              <div className="absolute -bottom-1 -right-1 bg-emerald-700 text-white p-1 rounded-full border-2 border-white">
-                <UserPlus className="w-3 h-3" />
-              </div>
-            </div>
-            <div className="flex-1">
-              <div className="flex items-baseline justify-between mb-1">
-                <h4 className="font-bold text-lg text-emerald-950">Hoàng Nam đã theo dõi bạn</h4>
-                <span className="text-[11px] text-gray-400 font-medium">10 phút trước</span>
-              </div>
-              <p className="text-gray-500 leading-relaxed text-sm mb-4 italic">
-                &ldquo;Rất thích các bài viết về thiền định của bạn!&rdquo;
-              </p>
-              <button className="px-6 py-2 bg-emerald-700 text-white rounded-full text-sm font-bold shadow-sm active:scale-95 transition-all">
-                Theo dõi lại
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-gray-900">
+              Thông báo
+              {unreadCount > 0 && (
+                <span className="ml-2 text-sm bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                  {unreadCount} chưa đọc
+                </span>
+              )}
+            </h2>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllRead}
+                className="flex items-center gap-2 text-sm text-emerald-600 font-semibold hover:underline"
+              >
+                <Check className="w-4 h-4" /> Đánh dấu tất cả đã đọc
               </button>
-            </div>
-          </motion.div>
+            )}
+          </div>
 
-          {/* Like notification */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1 }}
-            className="flex items-start gap-6"
-          >
-            <div className="relative">
-              <img
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8WSEdtDNO7rC9NO922ztSV85xdPhv8ui9Dmgz_kYJseJsdbHSpEmyCqXjswcCLeNEtoGO74575YKuxczg--5EsdM1-iR0VDD2nfC7lBR9fKBgHJ7GiDczinw8Q_AJZNrIh6X0wJQEXiy0Hjn1W4uFXZ5pDAd0geazZrGwv0Q6Yr0pKNq75eRhL5YC7OcUwrSNSVwJptN8qFUfw4z7r2xJiqyPEFjr54iBMkFMzY2otS1p5URZuto4mxTfOcUlUJ8DZI1a7SducPH2"
-                alt="User"
-                className="w-14 h-14 rounded-full border-2 border-white shadow-sm"
-              />
-              <div className="absolute -bottom-1 -right-1 bg-rose-500 text-white p-1 rounded-full border-2 border-white">
-                <Heart className="w-3 h-3 fill-current" />
-              </div>
+          {/* Content */}
+          {loading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
             </div>
-            <div className="flex-1">
-              <div className="flex items-baseline justify-between mb-1">
-                <h4 className="font-bold text-lg text-emerald-950">Thúy Vy và 4 người khác đã thích ảnh của bạn</h4>
-                <span className="text-[11px] text-gray-400 font-medium">1 giờ trước</span>
-              </div>
-              <div className="mt-3 w-20 h-20 rounded-xl overflow-hidden bg-gray-100">
-                <img
-                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAoIM8tgmAOh4k--_KkjX9v6enAIAR3ckoya9fK_GdPJzyfHmQ04-pxFkWQba9qN1Az7TXvjdbqjRWrafik0iK7PnmS2nU89NvqGnCoYpyzjchNfYSVjOZWQAVLyTTFgG-r5CvQIwPRJjWZB8W-Q0qH5vacj0QTLA4SMhuTHFMLMLbuZnHVoTPaiAg6MeR9DxLeDrnTO_CA13U5TExO8c9sQCb22X2NqiXz60Age0OF8ZQS7AT55dlRgFnMZ6OKYOJOVfmpUqxUDg3"
-                  alt="Post"
-                  className="w-full h-full object-cover"
-                />
-              </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-20 text-gray-400">
+              <Bell className="w-12 h-12 mx-auto mb-4 opacity-30" />
+              <p className="font-medium">Chưa có thông báo nào</p>
             </div>
-          </motion.div>
+          ) : (
+            <div className="divide-y divide-gray-50">
+              {filtered.map((notif, i) => (
+                <motion.div
+                  key={notif.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  onClick={() => !notif.isRead && markAsRead(notif.id)}
+                  className={`flex items-start gap-4 px-6 py-4 cursor-pointer transition-all hover:bg-gray-50 ${
+                    !notif.isRead ? 'bg-emerald-50/30' : ''
+                  }`}
+                >
+                  {/* Avatar + Icon */}
+                  <div className="relative flex-shrink-0">
+                    <img
+                      src={notif.sender?.avatar || `https://i.pravatar.cc/48?u=${notif.sender?.id}`}
+                      alt={notif.sender?.name || 'User'}
+                      className="w-12 h-12 rounded-full object-cover"
+                    />
+                    <div className={`absolute -bottom-1 -right-1 p-1 rounded-full border-2 border-white ${getIconBg(notif.type)}`}>
+                      {getIcon(notif.type)}
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1">
+                    <p className="text-sm text-gray-900">
+                      <span className="font-semibold">{notif.sender?.name || 'Ai đó'}</span>
+                      {' '}{notif.message}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">{timeAgo(notif.createdAt)}</p>
+                  </div>
+
+                  {/* Unread dot */}
+                  {!notif.isRead && (
+                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full flex-shrink-0 mt-1"></div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

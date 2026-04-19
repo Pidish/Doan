@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = verifyRefreshToken(refreshToken);
+   
+    const result = await verifyRefreshToken(refreshToken);
 
     if (!result.success) {
       return NextResponse.json(

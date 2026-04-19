@@ -33,7 +33,8 @@ model User {
   // ✅ Thêm relation ngược cho ModerationLog
   moderationLogs      ModerationLog[] @relation("ModeratorLogs")
   authorModerationLogs ModerationLog[] @relation("AuthorModerationLogs")
-
+  sentMessages     Message[] @relation("MessageSender")
+  receivedMessages Message[] @relation("MessageReceiver")
   aiHistories AIHistory[]
 }
 
@@ -51,7 +52,7 @@ model Post {
   comments   Comment[]
   likes      Like[]
   moderation ModerationLog?
-
+category  CategoryType   @default(DANH_CHO_BAN)
   @@index([authorId])
   @@index([createdAt(sort: Desc)])
   @@index([status])
@@ -146,7 +147,28 @@ model AIHistory {
   @@index([userId])
   @@index([createdAt(sort: Desc)])
 }
+model Message {
+  id         String   @id @default(uuid())
+  content    String
+  senderId   String
+  receiverId String
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
+  sender   User @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt(sort: Desc)])
+}
+enum CategoryType {
+  TINH_LANG    
+  SONG_XANH    
+  SANG_TAO     
+  TAM_LY_HOC   
+  DANH_CHO_BAN 
+}
 enum RoleType {
   USER
   ADMIN

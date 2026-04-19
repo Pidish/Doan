@@ -35,7 +35,14 @@ export default function LoginPage() {
 
       localStorage.setItem('accessToken', data.accessToken)
       localStorage.setItem('refreshToken', data.refreshToken)
-      router.push('/home')
+      localStorage.setItem('user', JSON.stringify(data.user))
+
+      // ✅ Phân quyền theo role
+      if (data.user.role === 'ADMIN') {
+        router.push('/admin')        // → Trang admin
+      } else {
+        router.push('/home')         // → Trang mạng xã hội
+      }
 
     } catch {
       setError('Không thể kết nối server')
@@ -43,7 +50,6 @@ export default function LoginPage() {
       setLoading(false)
     }
   }
-
   return (
     <div className="min-h-screen flex">
       {/* Left Side */}
