@@ -3,10 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { verifyAccessToken } from "@/lib/auth"
 
 // PATCH /api/notifications/[id]
-// Đánh dấu 1 thông báo là đã đọc
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } } // ✅ FIX
 ) {
   try {
     const result = verifyAccessToken(req)
@@ -14,7 +13,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params // ✅ KHÔNG await
     const userId = result.payload.id
 
     const notification = await prisma.notification.findUnique({
@@ -25,7 +24,6 @@ export async function PATCH(
       return NextResponse.json({ error: "Notification not found" }, { status: 404 })
     }
 
-    // Chỉ owner mới được đánh dấu đã đọc
     if (notification.userId !== userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -44,10 +42,9 @@ export async function PATCH(
 }
 
 // DELETE /api/notifications/[id]
-// Xóa 1 thông báo
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } } // ✅ FIX
 ) {
   try {
     const result = verifyAccessToken(req)
@@ -55,7 +52,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = params // ✅ KHÔNG await
     const userId = result.payload.id
 
     const notification = await prisma.notification.findUnique({
