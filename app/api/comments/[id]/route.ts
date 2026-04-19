@@ -1,15 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function PUT(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-
     const { id } = params;
-    const body = await req.json();
-    const { content } = body;
+    const { content } = await req.json();
 
     if (!content) {
       return NextResponse.json(
@@ -20,15 +18,11 @@ export async function PUT(
 
     const updatedComment = await prisma.comment.update({
       where: { id },
-      data: {
-        content
-      }
+      data: { content },
     });
 
     return NextResponse.json(updatedComment);
-
   } catch (error) {
-
     console.error("UPDATE COMMENT ERROR:", error);
 
     return NextResponse.json(
@@ -37,24 +31,22 @@ export async function PUT(
     );
   }
 }
+
 export async function DELETE(
-  req: Request,
+  req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-
     const { id } = params;
 
     await prisma.comment.delete({
-      where: { id }
+      where: { id },
     });
 
     return NextResponse.json({
-      message: "Comment deleted"
+      message: "Comment deleted",
     });
-
   } catch (error) {
-
     console.error("DELETE COMMENT ERROR:", error);
 
     return NextResponse.json(
