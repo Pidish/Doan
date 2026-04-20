@@ -165,7 +165,7 @@ export default function HomePage() {
           <div className="flex gap-4">
             <Link href="/profile" className="flex-shrink-0">
               <img
-                src={currentUser?.avatar || `https://i.pravatar.cc/40?u=me`}
+                src={currentUser?.avatar || `https://i.pravatar.cc/40?u=${currentUser?.id ?? 'me'}`}
                 alt={currentUser?.name || 'avatar'}
                 className="w-10 h-10 rounded-full object-cover hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer"
               />
