@@ -26,16 +26,15 @@ export async function GET(req: Request) {
 
     const posts = await prisma.post.findMany({
       where: {
-        OR: [
-          { authorId: userId },
-          { authorId: { in: followingIds } },
-        ],
+        authorId: { in: followingIds },
+        status: 'ACTIVE',
       },
       include: {
         author: {
           select: {
             id: true,
             name: true,
+            email: true,
             avatar: true,
           },
         },
@@ -46,12 +45,11 @@ export async function GET(req: Request) {
           },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
     });
 
-    return NextResponse.json(posts);
+    return NextResponse.json({ data: posts });
 
   } catch (error) {
     console.error("FEED ERROR:", error);

@@ -32,7 +32,8 @@ export default function HomePage() {
   const [posting, setPosting] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
-  const [currentUser, setCurrentUser] = useState<{ name: string; avatar?: string } | null>(null)
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar?: string } | null>(null)
+  const [activeTab, setActiveTab] = useState<'FOR_YOU' | 'FOLLOWING' | 'SONG_XANH' | 'TAM_LY_HOC'>('FOR_YOU')
 
   // ✅ Lấy token từ localStorage sau khi mount
   useEffect(() => {
@@ -40,39 +41,64 @@ export default function HomePage() {
     setToken(t)
   }, [])
 
-  // ✅ Fetch posts khi có token
-  const fetchPosts = useCallback(async (cursor?: string, tkn?: string | null) => {
+  // ✅ Fetch posts theo tab
+  const fetchPosts = useCallback(async (
+    cursor?: string,
+    tkn?: string | null,
+    tab?: typeof activeTab,
+    userId?: string
+  ) => {
     const t = tkn ?? token
+    const currentTab = tab ?? activeTab
+    setLoading(true)
     try {
-      const url = cursor ? `/api/posts?cursor=${cursor}` : '/api/posts'
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${t}` }
-      })
+      let url: string
+      if (currentTab === 'FOLLOWING') {
+        url = `/api/posts/feed?userId=${userId ?? currentUser?.id ?? ''}`
+      } else if (currentTab === 'SONG_XANH') {
+        url = cursor ? `/api/posts?category=SONG_XANH&cursor=${cursor}` : '/api/posts?category=SONG_XANH'
+      } else if (currentTab === 'TAM_LY_HOC') {
+        url = cursor ? `/api/posts?category=TAM_LY_HOC&cursor=${cursor}` : '/api/posts?category=TAM_LY_HOC'
+      } else {
+        url = cursor ? `/api/posts?cursor=${cursor}` : '/api/posts'
+      }
+
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${t}` } })
       const data = await res.json()
       if (cursor) {
-        setPosts(prev => [...prev, ...data.data])
+        setPosts(prev => [...prev, ...(data.data || [])])
       } else {
         setPosts(data.data || [])
       }
-      setNextCursor(data.nextCursor)
+      setNextCursor(data.nextCursor ?? null)
     } catch {
       setError('Không thể tải bài viết')
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, activeTab, currentUser?.id])
 
   useEffect(() => {
     const t = localStorage.getItem('accessToken')
     setToken(t)
-    fetchPosts(undefined, t)
     if (t) {
       fetch('/api/me', { headers: { Authorization: `Bearer ${t}` } })
         .then(r => r.json())
-        .then(d => setCurrentUser(d.data))
-        .catch(() => {})
+        .then(d => {
+          setCurrentUser(d.data)
+          fetchPosts(undefined, t, 'FOR_YOU', d.data?.id)
+        })
+        .catch(() => fetchPosts(undefined, t, 'FOR_YOU'))
     }
   }, [])
+
+  // Reload khi đổi tab
+  useEffect(() => {
+    if (token && currentUser) {
+      setPosts([])
+      fetchPosts(undefined, token, activeTab, currentUser.id)
+    }
+  }, [activeTab])
 
   // ✅ Tạo post với token từ state
   const handleCreatePost = async () => {
@@ -173,14 +199,31 @@ export default function HomePage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-8 mb-8 overflow-x-auto pb-2">
-          <button className="text-emerald-700 font-bold relative after:content-[''] after:absolute after:-bottom-2 after:left-0 after:w-1/2 after:h-1 after:bg-emerald-700 after:rounded-full">
-            Dành cho bạn
-          </button>
-          <button className="text-gray-400 font-medium hover:text-emerald-700 transition-colors">Đang theo dõi</button>
-          <button className="text-gray-400 font-medium hover:text-emerald-700 transition-colors">Thiên nhiên</button>
-          <button className="text-gray-400 font-medium hover:text-emerald-700 transition-colors">Tâm hồn</button>
-        </div>
+        {(() => {
+          const tabs = [
+            { key: 'FOR_YOU', label: 'Dành cho bạn' },
+            { key: 'FOLLOWING', label: 'Đang theo dõi' },
+            { key: 'SONG_XANH', label: 'Thiên nhiên' },
+            { key: 'TAM_LY_HOC', label: 'Tâm hồn' },
+          ] as const
+          return (
+            <div className="flex gap-8 mb-8 overflow-x-auto pb-2 border-b border-gray-100">
+              {tabs.map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`pb-3 font-medium transition-colors relative whitespace-nowrap ${
+                    activeTab === tab.key
+                      ? 'text-emerald-700 font-bold after:content-[\'\'] after:absolute after:-bottom-[1px] after:left-0 after:w-full after:h-0.5 after:bg-emerald-700 after:rounded-full'
+                      : 'text-gray-400 hover:text-emerald-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )
+        })()}
 
         {/* Posts */}
         {loading ? (
@@ -189,8 +232,12 @@ export default function HomePage() {
           </div>
         ) : posts.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
-            <p className="text-lg font-medium">Chưa có bài viết nào</p>
-            <p className="text-sm mt-2">Hãy là người đầu tiên chia sẻ!</p>
+            <p className="text-lg font-medium">
+              {activeTab === 'FOLLOWING' ? 'Chưa có bài viết từ người bạn theo dõi' : 'Chưa có bài viết nào'}
+            </p>
+            <p className="text-sm mt-2">
+              {activeTab === 'FOLLOWING' ? 'Hãy theo dõi thêm người dùng để xem bài viết của họ!' : 'Hãy là người đầu tiên chia sẻ!'}
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-6">
