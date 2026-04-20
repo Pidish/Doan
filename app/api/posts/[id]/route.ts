@@ -3,6 +3,43 @@ import { prisma } from "@/lib/prisma";
 import { verifyAccessToken } from "@/lib/auth";
 
 /* =========================
+   GET - Chi tiết post
+========================= */
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params
+    const result = verifyAccessToken(req)
+    if (!result.success) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const post = await prisma.post.findUnique({
+      where: { id },
+      include: {
+        author: { select: { id: true, name: true, email: true, avatar: true } },
+        comments: {
+          include: { author: { select: { id: true, name: true, email: true, avatar: true } } },
+          orderBy: { createdAt: 'asc' },
+        },
+        _count: { select: { likes: true, comments: true } },
+      },
+    })
+
+    if (!post) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
+    return NextResponse.json({ data: post })
+  } catch (error) {
+    console.error("GET /api/posts/[id] error:", error)
+    return NextResponse.json({ error: "Server error" }, { status: 500 })
+  }
+}
+
+/* =========================
    PUT - Update post
 ========================= */
 export async function PUT(

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Bell, UserPlus, Heart, AtSign, Loader2, Check } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -19,6 +20,7 @@ interface Notification {
 }
 
 export default function NotificationsPage() {
+  const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [activeFilter, setActiveFilter] = useState('all')
@@ -190,7 +192,14 @@ export default function NotificationsPage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  onClick={() => !notif.isRead && markAsRead(notif.id)}
+                  onClick={async () => {
+                    if (!notif.isRead) await markAsRead(notif.id)
+                    if (notif.postId && (notif.type === 'LIKE' || notif.type === 'COMMENT')) {
+                      router.push(`/posts/${notif.postId}`)
+                    } else if (notif.type === 'FOLLOW' && notif.sender?.id) {
+                      router.push(`/profile`)
+                    }
+                  }}
                   className={`flex items-start gap-4 px-6 py-4 cursor-pointer transition-all hover:bg-gray-50 ${
                     !notif.isRead ? 'bg-emerald-50/30' : ''
                   }`}
