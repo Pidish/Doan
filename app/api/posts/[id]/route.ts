@@ -16,6 +16,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const userId = result.payload.id
+
     const post = await prisma.post.findUnique({
       where: { id },
       include: {
@@ -24,15 +26,22 @@ export async function GET(
           include: { author: { select: { id: true, name: true, email: true, avatar: true } } },
           orderBy: { createdAt: 'asc' },
         },
+        likes: {
+          include: { user: { select: { id: true, name: true, avatar: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
         _count: { select: { likes: true, comments: true } },
       },
     })
+
+    const isLiked = post?.likes.some(l => l.userId === userId) ?? false
 
     if (!post) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    return NextResponse.json({ data: post })
+    return NextResponse.json({ data: { ...post, isLiked } })
   } catch (error) {
     console.error("GET /api/posts/[id] error:", error)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

@@ -4,13 +4,19 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Heart, MessageCircle, Loader2, Send } from 'lucide-react'
 
+interface Liker {
+  user: { id: string; name: string; avatar?: string }
+}
+
 interface Post {
   id: string
   content: string
   imageUrl?: string
   createdAt: string
+  isLiked: boolean
   author: { id: string; name: string; email: string; avatar?: string }
   comments: Comment[]
+  likes: Liker[]
   _count: { likes: number; comments: number }
 }
 
@@ -30,6 +36,7 @@ export default function PostDetailPage() {
   const [posting, setPosting] = useState(false)
   const [liked, setLiked] = useState(false)
   const [likeCount, setLikeCount] = useState(0)
+  const [likers, setLikers] = useState<Liker[]>([])
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken')
@@ -39,7 +46,9 @@ export default function PostDetailPage() {
       .then(r => r.json())
       .then(d => {
         setPost(d.data)
+        setLiked(d.data?.isLiked ?? false)
         setLikeCount(d.data?._count?.likes ?? 0)
+        setLikers(d.data?.likes ?? [])
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -138,10 +147,10 @@ export default function PostDetailPage() {
         <div className="flex items-center gap-6 text-gray-400 pt-3 border-t border-gray-100">
           <button
             onClick={handleLike}
-            className={`flex items-center gap-1.5 transition-all ${liked ? 'text-rose-500' : 'hover:text-rose-500'}`}
+            className={`flex items-center gap-1.5 transition-all active:scale-90 ${liked ? 'text-rose-500' : 'hover:text-rose-500'}`}
           >
             <Heart className={`w-5 h-5 ${liked ? 'fill-current' : ''}`} />
-            <span className="text-sm">{likeCount}</span>
+            <span className="text-sm font-medium">{likeCount}</span>
           </button>
           <span className="flex items-center gap-1.5 text-sm">
             <MessageCircle className="w-5 h-5" />
@@ -149,6 +158,33 @@ export default function PostDetailPage() {
           </span>
         </div>
       </div>
+
+      {/* Likers */}
+      {likers.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+          <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+            <Heart className="w-4 h-4 text-rose-500 fill-current" />
+            {likeCount} người đã thích
+          </h3>
+          <div className="flex flex-wrap gap-3">
+            {likers.map(({ user }) => (
+              <div key={user.id} className="flex items-center gap-2 bg-gray-50 rounded-full px-3 py-1.5">
+                <img
+                  src={user.avatar || `https://i.pravatar.cc/28?u=${user.id}`}
+                  alt={user.name}
+                  className="w-6 h-6 rounded-full object-cover"
+                />
+                <span className="text-sm font-medium text-gray-700">{user.name}</span>
+              </div>
+            ))}
+            {likeCount > 20 && (
+              <div className="flex items-center px-3 py-1.5 text-sm text-gray-400">
+                +{likeCount - 20} người khác
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Comments */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
