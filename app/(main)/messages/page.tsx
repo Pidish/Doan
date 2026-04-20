@@ -17,6 +17,7 @@ interface Message {
   senderName: string
   message: string
   timestamp: string
+  deletedAt?: string | null
 }
 
 export default function MessagesPage() {
@@ -94,6 +95,12 @@ export default function MessagesPage() {
 
     channelRef.current.bind('new-message', (data: Message) => {
       setMessages(prev => [...prev, data])
+    })
+
+    channelRef.current.bind('message-deleted', (data: { id: string; deletedAt: string }) => {
+      setMessages(prev => prev.map(m =>
+        m.id === data.id ? { ...m, deletedAt: data.deletedAt } : m
+      ))
     })
 
     return () => {
@@ -188,7 +195,10 @@ export default function MessagesPage() {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       })
-      setMessages(prev => prev.filter(m => m.id !== id))
+      // Soft delete: cập nhật local state, không xóa khỏi danh sách
+      setMessages(prev => prev.map(m =>
+        m.id === id ? { ...m, deletedAt: new Date().toISOString() } : m
+      ))
       setSelectedMsg(null)
     } catch (err) {
       console.error('Delete error:', err)
@@ -336,11 +346,18 @@ export default function MessagesPage() {
                         ? 'bg-emerald-600 text-white rounded-br-sm'
                         : 'bg-white text-gray-900 shadow-sm border border-gray-100 rounded-bl-sm'
                         }`}>
-                        {msg.message}
+                        {msg.deletedAt ? (
+                          <span className={`italic text-xs ${isMe ? 'text-emerald-200' : 'text-gray-400'}`}>
+                            {isMe ? 'Bạn đã xóa tin nhắn' : 'Tin nhắn đã bị xóa'} · {timeFormat(msg.deletedAt)}
+                          </span>
+                        ) : (
+                          msg.message
+                        )}
                       </div>
 
-                      {/* Nút ··· */}
+                      {/* Nút ··· — ẩn khi đã xóa */}
                       <div className="relative flex-shrink-0">
+                        {!msg.deletedAt && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -350,6 +367,7 @@ export default function MessagesPage() {
                         >
                           ···
                         </button>
+                        )}
 
                         {/* Dropdown menu */}
                         {isSelected && (

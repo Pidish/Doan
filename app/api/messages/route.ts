@@ -95,6 +95,7 @@ export async function GET(req: NextRequest) {
       senderName: m.sender.name,
       message: m.content,
       timestamp: m.createdAt.toISOString(),
+      deletedAt: m.deletedAt?.toISOString() ?? null,
     }))
 
     return NextResponse.json({ data })
