@@ -1,9 +1,76 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Search, TrendingUp } from 'lucide-react'
-import { SUGGESTED_USERS } from '../constants'
+
+interface SuggestedUser {
+  id: string
+  name: string
+  email: string
+  avatar?: string
+  _count: { followers: number }
+  isFollowing: boolean
+}
 
 export function RightSidebar() {
+  const [users, setUsers] = useState<SuggestedUser[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken')
+    if (!token) return
+
+    // Fetch current user
+    fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => {
+        setCurrentUserId(d.data?.id)
+
+        // Fetch danh sách đang theo dõi
+        return fetch(`/api/follow/${d.data?.id}/following`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      })
+      .then(r => r.json())
+      .then(d => {
+        const ids = new Set<string>((d.data || []).map((u: { id: string }) => u.id))
+        setFollowingIds(ids)
+      })
+      .catch(() => {})
+
+    // Fetch danh sách user gợi ý
+    fetch('/api/users', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setUsers(d.data || []))
+      .catch(() => {})
+  }, [])
+
+  const handleFollow = async (userId: string) => {
+    const token = localStorage.getItem('accessToken')
+    try {
+      const res = await fetch('/api/follow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ followingId: userId })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setFollowingIds(prev => {
+          const next = new Set(prev)
+          data.following ? next.add(userId) : next.delete(userId)
+          return next
+        })
+      }
+    } catch {}
+  }
+
+  // Lọc bỏ bản thân, ưu tiên người chưa theo dõi, lấy tối đa 5
+  const suggested = users
+    .filter(u => u.id !== currentUserId)
+    .sort((a, b) => (followingIds.has(a.id) ? 1 : 0) - (followingIds.has(b.id) ? 1 : 0))
+    .slice(0, 5)
+
   return (
     <aside className="hidden lg:flex flex-col w-[350px] h-screen fixed right-0 top-0 p-10 gap-10 overflow-y-auto bg-white border-l border-gray-100">
       {/* Search */}
@@ -41,22 +108,36 @@ export function RightSidebar() {
       <section>
         <h4 className="font-bold text-xl text-emerald-700 mb-6">Gợi ý kết nối</h4>
         <div className="flex flex-col gap-6">
-          {SUGGESTED_USERS.map((user) => (
-            <div key={user.id} className="flex items-center gap-4">
-              <img
-                src={user.avatar}
-                alt={user.name}
-                className="w-12 h-12 rounded-full object-cover"
-              />
-              <div className="flex-1">
-                <h5 className="font-bold text-sm text-gray-900 leading-none">{user.name}</h5>
-                <p className="text-xs text-gray-400 mt-1">{user.role}</p>
-              </div>
-              <button className="text-xs font-bold text-emerald-700 px-4 py-2 border border-emerald-200 rounded-full hover:bg-emerald-700 hover:text-white transition-all">
-                Theo dõi
-              </button>
-            </div>
-          ))}
+          {suggested.length === 0 ? (
+            <p className="text-sm text-gray-400">Không có gợi ý nào</p>
+          ) : (
+            suggested.map((user) => {
+              const isFollowing = followingIds.has(user.id)
+              return (
+                <div key={user.id} className="flex items-center gap-4">
+                  <img
+                    src={user.avatar || `https://i.pravatar.cc/48?u=${user.id}`}
+                    alt={user.name}
+                    className="w-12 h-12 rounded-full object-cover"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h5 className="font-bold text-sm text-gray-900 leading-none truncate">{user.name}</h5>
+                    <p className="text-xs text-gray-400 mt-1 truncate">@{user.email.split('@')[0]}</p>
+                  </div>
+                  <button
+                    onClick={() => handleFollow(user.id)}
+                    className={`text-xs font-bold px-4 py-2 rounded-full border transition-all flex-shrink-0 ${
+                      isFollowing
+                        ? 'bg-emerald-700 text-white border-emerald-700 hover:bg-red-500 hover:border-red-500'
+                        : 'text-emerald-700 border-emerald-200 hover:bg-emerald-700 hover:text-white'
+                    }`}
+                  >
+                    {isFollowing ? 'Đang theo dõi' : 'Theo dõi'}
+                  </button>
+                </div>
+              )
+            })
+          )}
         </div>
       </section>
 
