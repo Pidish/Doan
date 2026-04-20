@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { PostCard } from '@/src/components/PostCard'
 import { RightSidebar } from '@/src/components/RightSidebar'
 import { motion } from 'framer-motion'
@@ -31,6 +32,7 @@ export default function HomePage() {
   const [posting, setPosting] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<{ name: string; avatar?: string } | null>(null)
 
   // ✅ Lấy token từ localStorage sau khi mount
   useEffect(() => {
@@ -64,6 +66,12 @@ export default function HomePage() {
     const t = localStorage.getItem('accessToken')
     setToken(t)
     fetchPosts(undefined, t)
+    if (t) {
+      fetch('/api/me', { headers: { Authorization: `Bearer ${t}` } })
+        .then(r => r.json())
+        .then(d => setCurrentUser(d.data))
+        .catch(() => {})
+    }
   }, [])
 
   // ✅ Tạo post với token từ state
@@ -129,7 +137,13 @@ export default function HomePage() {
         {/* Tạo post mới */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-8">
           <div className="flex gap-4">
-            <div className="w-10 h-10 rounded-full bg-emerald-100 flex-shrink-0"></div>
+            <Link href="/profile" className="flex-shrink-0">
+              <img
+                src={currentUser?.avatar || `https://i.pravatar.cc/40?u=me`}
+                alt={currentUser?.name || 'avatar'}
+                className="w-10 h-10 rounded-full object-cover hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer"
+              />
+            </Link>
             <div className="flex-1">
               <textarea
                 value={newPost}
