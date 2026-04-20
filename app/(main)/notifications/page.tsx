@@ -55,6 +55,10 @@ export default function NotificationsPage() {
     }
   }
 
+  const dispatchUnread = (count: number) => {
+    window.dispatchEvent(new CustomEvent('notification-read', { detail: count }))
+  }
+
   const markAsRead = async (id: string) => {
     const token = localStorage.getItem('accessToken')
     await fetch(`/api/notifications/${id}`, {
@@ -64,7 +68,9 @@ export default function NotificationsPage() {
     setNotifications(prev =>
       prev.map(n => n.id === id ? { ...n, isRead: true } : n)
     )
-    setUnreadCount(prev => Math.max(0, prev - 1))
+    const newCount = Math.max(0, unreadCount - 1)
+    setUnreadCount(newCount)
+    dispatchUnread(newCount)
   }
 
   const markAllRead = async () => {
@@ -75,6 +81,7 @@ export default function NotificationsPage() {
     })
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
     setUnreadCount(0)
+    dispatchUnread(0)
   }
 
   const getIcon = (type: string) => {

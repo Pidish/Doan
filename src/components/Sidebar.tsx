@@ -16,23 +16,42 @@ interface CurrentUser {
 export function Sidebar() {
   const pathname = usePathname()
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken')
     if (!token) return
+
     fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => setCurrentUser(d.data))
       .catch(() => {})
+
+    // Fetch unread notification count
+    const fetchUnread = () => {
+      fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(d => setUnreadCount(d.unreadCount ?? 0))
+        .catch(() => {})
+    }
+    fetchUnread()
+
+    // Lắng nghe event khi đánh dấu đọc từ trang notifications
+    const onUpdate = (e: Event) => {
+      const count = (e as CustomEvent<number>).detail
+      setUnreadCount(count)
+    }
+    window.addEventListener('notification-read', onUpdate)
+    return () => window.removeEventListener('notification-read', onUpdate)
   }, [])
 
   const navItems = [
-    { icon: Home, label: 'Home', path: '/home' },
-    { icon: Compass, label: 'Explore', path: '/explore' },
-    { icon: Bell, label: 'Notifications', path: '/notifications' },
-    { icon: Mail, label: 'Messages', path: '/messages' },
-    { icon: User, label: 'Profile', path: '/profile' },
-    { icon: Settings, label: 'Settings', path: '/settings' },
+    { icon: Home, label: 'Home', path: '/home', badge: 0 },
+    { icon: Compass, label: 'Explore', path: '/explore', badge: 0 },
+    { icon: Bell, label: 'Notifications', path: '/notifications', badge: unreadCount },
+    { icon: Mail, label: 'Messages', path: '/messages', badge: 0 },
+    { icon: User, label: 'Profile', path: '/profile', badge: 0 },
+    { icon: Settings, label: 'Settings', path: '/settings', badge: 0 },
   ]
 
   return (
@@ -56,7 +75,14 @@ export function Sidebar() {
                   : "text-emerald-800/70 hover:bg-emerald-100 font-medium"
               )}
             >
-              <item.icon className="w-6 h-6" />
+              <div className="relative">
+                <item.icon className="w-6 h-6" />
+                {item.badge > 0 && (
+                  <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
+              </div>
               <span className="text-sm">{item.label}</span>
             </Link>
           )
