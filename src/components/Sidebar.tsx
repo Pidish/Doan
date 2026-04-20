@@ -2,12 +2,29 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { Home, Compass, Bell, Mail, User, Settings } from 'lucide-react'
 import { cn } from '../lib/utils'
-import { CURRENT_USER } from '../constants'
+
+interface CurrentUser {
+  id: string
+  name: string
+  email: string
+  avatar?: string
+}
 
 export function Sidebar() {
   const pathname = usePathname()
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken')
+    if (!token) return
+    fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setCurrentUser(d.data))
+      .catch(() => {})
+  }, [])
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/home' },
@@ -47,20 +64,20 @@ export function Sidebar() {
       </nav>
 
       <div className="px-8 mt-auto">
-        <div className="p-4 bg-white/60 rounded-2xl backdrop-blur-sm">
+        <Link href="/profile" className="block p-4 bg-white/60 rounded-2xl backdrop-blur-sm hover:bg-white/80 transition-all">
           <p className="text-[10px] uppercase tracking-widest text-emerald-900/40 font-bold mb-3">Tài khoản</p>
           <div className="flex items-center gap-3">
             <img
-              src={CURRENT_USER.avatar}
-              alt={CURRENT_USER.name}
+              src={currentUser?.avatar || `https://i.pravatar.cc/40?u=${currentUser?.id ?? 'me'}`}
+              alt={currentUser?.name || ''}
               className="w-10 h-10 rounded-full border-2 border-emerald-100 object-cover"
             />
             <div className="overflow-hidden">
-              <p className="text-xs font-bold text-emerald-900 truncate">{CURRENT_USER.name}</p>
-              <p className="text-[10px] text-emerald-800/60 truncate">{CURRENT_USER.handle}</p>
+              <p className="text-xs font-bold text-emerald-900 truncate">{currentUser?.name ?? '...'}</p>
+              <p className="text-[10px] text-emerald-800/60 truncate">@{currentUser?.email?.split('@')[0] ?? ''}</p>
             </div>
           </div>
-        </div>
+        </Link>
       </div>
     </aside>
   )
