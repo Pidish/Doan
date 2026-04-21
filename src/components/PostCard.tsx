@@ -39,18 +39,24 @@ export function PostCard({ post }: PostCardProps) {
 
   // ─── Like ────────────────────────────────────────────────────
   const handleLike = async () => {
+    // Optimistic update
+    const prevLiked = liked
+    const prevCount = likeCount
+    setLiked(!liked)
+    setLikeCount(prev => liked ? prev - 1 : prev + 1)
+
     try {
       const res = await fetch(`/api/posts/${post.id}/like`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       })
-      const data = await res.json()
-      if (res.ok) {
-        setLiked(data.liked)
-        setLikeCount(prev => data.liked ? prev + 1 : prev - 1)
+      if (!res.ok) {
+        setLiked(prevLiked)
+        setLikeCount(prevCount)
       }
-    } catch (err) {
-      console.error('Like error:', err)
+    } catch {
+      setLiked(prevLiked)
+      setLikeCount(prevCount)
     }
   }
 

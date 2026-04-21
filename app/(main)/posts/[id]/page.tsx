@@ -56,15 +56,25 @@ export default function PostDetailPage() {
   }, [id])
 
   const handleLike = async () => {
+    // Optimistic update
+    const prevLiked = liked
+    const prevCount = likeCount
+    setLiked(!liked)
+    setLikeCount(prev => liked ? prev - 1 : prev + 1)
+
     const token = localStorage.getItem('accessToken')
-    const res = await fetch(`/api/posts/${id}/like`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    const data = await res.json()
-    if (res.ok) {
-      setLiked(data.liked)
-      setLikeCount(prev => data.liked ? prev + 1 : prev - 1)
+    try {
+      const res = await fetch(`/api/posts/${id}/like`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) {
+        setLiked(prevLiked)
+        setLikeCount(prevCount)
+      }
+    } catch {
+      setLiked(prevLiked)
+      setLikeCount(prevCount)
     }
   }
 
