@@ -46,12 +46,12 @@ export function Sidebar() {
   }, [])
 
   const navItems = [
-    { icon: Home, label: 'Home', path: '/home', badge: 0 },
-    { icon: Compass, label: 'Explore', path: '/explore', badge: 0 },
-    { icon: Bell, label: 'Notifications', path: '/notifications', badge: unreadCount },
-    { icon: Mail, label: 'Messages', path: '/messages', badge: 0 },
-    { icon: User, label: 'Profile', path: '/profile', badge: 0 },
-    { icon: Settings, label: 'Settings', path: '/settings', badge: 0 },
+    { icon: Home, label: 'Trang chủ', path: '/home', badge: 0 },
+    { icon: Compass, label: 'Khám phá', path: '/explore', badge: 0 },
+    { icon: Bell, label: 'Thông báo', path: '/notifications', badge: unreadCount },
+    { icon: Mail, label: 'Tin nhắn', path: '/messages', badge: 0 },
+    { icon: User, label: 'Hồ sơ', path: '/profile', badge: 0 },
+    { icon: Settings, label: 'Cài đặt', path: '/settings', badge: 0 },
   ]
 
   return (
