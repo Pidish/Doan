@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ThemeProvider } from "@/src/components/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "Nexora",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi">
-      <body suppressHydrationWarning={true}>{children}</body>
+      <body suppressHydrationWarning={true}>
+        <ThemeProvider />
+        {children}
+      </body>
     </html>
   );
 }

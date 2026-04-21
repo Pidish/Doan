@@ -218,7 +218,11 @@ export default function SettingsPage() {
                       {themes.map(t => (
                         <button
                           key={t.key}
-                          onClick={() => { setTheme(t.key); savePrefs({ theme: t.key }) }}
+                          onClick={() => {
+                            setTheme(t.key)
+                            savePrefs({ theme: t.key })
+                            window.dispatchEvent(new CustomEvent('nexora-theme', { detail: t.key }))
+                          }}
                           className="space-y-2 group"
                         >
                           <div className={`aspect-video ${t.bg} rounded-xl border-2 transition-all flex flex-col justify-center items-center gap-1 ${theme === t.key ? 'border-emerald-600 shadow-md' : 'border-gray-200'}`}>
