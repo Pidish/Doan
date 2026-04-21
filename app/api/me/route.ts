@@ -58,9 +58,9 @@ export async function PATCH(req: NextRequest) {
     const user = await prisma.user.update({
       where: { id: result.payload.id },
       data: {
-        ...(name && { name }),
-        ...(bio && { bio }),
-        ...(avatar && { avatar }),
+        ...(name !== undefined && { name }),
+        ...(bio !== undefined && { bio: bio || null }),
+        ...(avatar !== undefined && { avatar: avatar || null }),
       },
       select: {
         id: true,

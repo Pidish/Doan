@@ -12,6 +12,30 @@ interface UserProfile {
   bio?: string
 }
 
+// Resize + compress image to base64, max 300px, quality 0.8
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new window.Image()
+      img.onload = () => {
+        const MAX = 300
+        const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = img.width * scale
+        canvas.height = img.height * scale
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.8))
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 export default function EditProfilePage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -20,11 +44,13 @@ export default function EditProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState('')
 
   const [name, setName] = useState('')
   const [bio, setBio] = useState('')
   const [avatarPreview, setAvatarPreview] = useState('')
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarBase64, setAvatarBase64] = useState<string | null>(null)
+  const [compressing, setCompressing] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken')
@@ -43,51 +69,47 @@ export default function EditProfilePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setAvatarFile(file)
-    setAvatarPreview(URL.createObjectURL(file))
-  }
 
-  const uploadAvatar = async (file: File): Promise<string> => {
-    const token = localStorage.getItem('accessToken')
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: formData })
-    const data = await res.json()
-    return data.url
+    // Instant preview
+    setAvatarPreview(URL.createObjectURL(file))
+    setCompressing(true)
+    try {
+      const base64 = await compressImage(file)
+      setAvatarBase64(base64)
+    } catch {
+      setError('Không thể đọc ảnh, thử lại với ảnh khác')
+    } finally {
+      setCompressing(false)
+    }
   }
 
   const handleSave = async () => {
-    if (!name.trim()) return
+    if (!name.trim() || !user) return
     setSaving(true)
+    setError('')
     const token = localStorage.getItem('accessToken')
     try {
-      let avatarUrl = user?.avatar
-
-      if (avatarFile) {
-        try {
-          avatarUrl = await uploadAvatar(avatarFile)
-        } catch {
-          // upload failed, keep old avatar
-        }
-      }
-
       const res = await fetch('/api/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: name.trim(), bio: bio.trim(), avatar: avatarUrl })
+        body: JSON.stringify({
+          name: name.trim(),
+          bio: bio.trim(),
+          avatar: avatarBase64 ?? user.avatar,
+        })
       })
 
       if (res.ok) {
         setSaved(true)
-        setTimeout(() => {
-          router.push('/profile')
-        }, 800)
+        setTimeout(() => router.push('/profile'), 800)
+      } else {
+        setError('Lưu thất bại, thử lại')
       }
-    } catch (err) {
-      console.error(err)
+    } catch {
+      setError('Có lỗi xảy ra')
     } finally {
       setSaving(false)
     }
@@ -101,7 +123,7 @@ export default function EditProfilePage() {
 
   if (!user) return null
 
-  const hasChanged = name !== (user.name || '') || bio !== (user.bio || '') || avatarFile !== null
+  const hasChanged = name !== (user.name || '') || bio !== (user.bio || '') || avatarBase64 !== null
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -116,7 +138,7 @@ export default function EditProfilePage() {
         <h1 className="font-bold text-gray-900 flex-1">Chỉnh sửa hồ sơ</h1>
         <button
           onClick={handleSave}
-          disabled={saving || !hasChanged || !name.trim()}
+          disabled={saving || !hasChanged || !name.trim() || compressing}
           className={`flex items-center gap-2 px-5 py-2 rounded-full font-semibold text-sm transition-all ${
             saved
               ? 'bg-emerald-100 text-emerald-700'
@@ -125,7 +147,9 @@ export default function EditProfilePage() {
               : 'bg-gray-100 text-gray-400 cursor-not-allowed'
           }`}
         >
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><Check className="w-4 h-4" /> Đã lưu</> : 'Lưu'}
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" />
+            : saved ? <><Check className="w-4 h-4" /> Đã lưu</>
+            : 'Lưu'}
         </button>
       </div>
 
@@ -135,11 +159,17 @@ export default function EditProfilePage() {
         <div className="flex flex-col items-center gap-3">
           <div className="relative">
             <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-white shadow-lg bg-gray-100">
-              <img
-                src={avatarPreview || `https://i.pravatar.cc/160?u=${user.id}`}
-                alt="Avatar"
-                className="w-full h-full object-cover"
-              />
+              {compressing ? (
+                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                  <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+                </div>
+              ) : (
+                <img
+                  src={avatarPreview || `https://i.pravatar.cc/160?u=${user.id}`}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                />
+              )}
             </div>
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -149,18 +179,14 @@ export default function EditProfilePage() {
             </button>
           </div>
           <p className="text-sm text-gray-400">Bấm vào biểu tượng máy ảnh để thay ảnh</p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleAvatarChange}
-          />
+          {avatarBase64 && !compressing && (
+            <span className="text-xs text-emerald-600 font-medium">✓ Ảnh mới đã sẵn sàng</span>
+          )}
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
         </div>
 
         {/* Form */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-
           {/* Name */}
           <div className="px-5 py-4 border-b border-gray-100">
             <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
@@ -179,7 +205,7 @@ export default function EditProfilePage() {
             </div>
           </div>
 
-          {/* Username (read-only) */}
+          {/* Username read-only */}
           <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50">
             <label className="flex items-center gap-2 text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
               <AtSign className="w-3.5 h-3.5" /> Tên người dùng
@@ -207,17 +233,21 @@ export default function EditProfilePage() {
           </div>
         </div>
 
-        {/* Email (read-only) */}
+        {/* Email read-only */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
           <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-2">Email</label>
           <p className="text-sm text-gray-400">{user.email}</p>
           <p className="text-xs text-gray-300 mt-1">Email không thể thay đổi</p>
         </div>
 
-        {/* Save button (bottom) */}
+        {error && (
+          <p className="text-sm text-red-500 text-center">{error}</p>
+        )}
+
+        {/* Save bottom */}
         <button
           onClick={handleSave}
-          disabled={saving || !hasChanged || !name.trim()}
+          disabled={saving || !hasChanged || !name.trim() || compressing}
           className={`w-full py-3.5 rounded-2xl font-bold text-sm transition-all flex items-center justify-center gap-2 ${
             saved
               ? 'bg-emerald-100 text-emerald-700'
