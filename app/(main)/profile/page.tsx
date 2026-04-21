@@ -266,17 +266,22 @@ export default function ProfilePage() {
           <div className="hidden lg:flex flex-col gap-4 w-72">
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
               <h3 className="font-bold text-gray-900 mb-4">Khoảnh khắc</h3>
-              <div className="grid grid-cols-2 gap-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="aspect-square rounded-xl overflow-hidden">
-                    <img
-                      src={`https://picsum.photos/seed/moment${i}/200/200`}
-                      alt="Moment"
-                      className="w-full h-full object-cover hover:scale-105 transition-transform"
-                    />
-                  </div>
-                ))}
-              </div>
+              {posts.filter(p => p.imageUrl).length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">Chưa có ảnh nào</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {posts.filter(p => p.imageUrl).slice(0, 6).map(p => (
+                    <div key={p.id} className="aspect-square rounded-xl overflow-hidden">
+                      <img
+                        src={p.imageUrl!}
+                        alt="Moment"
+                        className="w-full h-full object-cover hover:scale-105 transition-transform cursor-pointer"
+                        onClick={() => window.location.href = `/posts/${p.id}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
