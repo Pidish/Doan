@@ -55,13 +55,15 @@ export function Sidebar() {
   ]
 
   return (
-    <aside className="hidden md:flex flex-col py-10 gap-2 w-72 h-screen fixed left-0 top-0 bg-emerald-50 rounded-r-[3rem] z-40">
-      <div className="px-10 mb-10">
+    <aside className="hidden md:flex flex-col w-72 h-screen fixed left-0 top-0 bg-emerald-50 rounded-r-[3rem] z-40 overflow-hidden">
+      {/* Logo */}
+      <div className="px-10 pt-10 pb-6">
         <h1 className="text-2xl font-black text-emerald-900 italic">Nexora</h1>
         <p className="text-[10px] font-medium text-emerald-800/60 uppercase tracking-widest mt-1">Digital Sanctuary</p>
       </div>
 
-      <nav className="flex flex-col gap-1 flex-1">
+      {/* Nav */}
+      <nav className="flex flex-col gap-1 px-4">
         {navItems.map((item) => {
           const isActive = pathname === item.path
           return (
@@ -69,14 +71,14 @@ export function Sidebar() {
               key={item.path}
               href={item.path}
               className={cn(
-                "flex items-center gap-4 px-6 py-4 mx-4 transition-all rounded-full active:scale-95",
+                "flex items-center gap-4 px-6 py-3.5 transition-all rounded-full active:scale-95",
                 isActive
                   ? "bg-emerald-700 text-white font-bold shadow-sm"
                   : "text-emerald-800/70 hover:bg-emerald-100 font-medium"
               )}
             >
               <div className="relative">
-                <item.icon className="w-6 h-6" />
+                <item.icon className="w-5 h-5" />
                 {item.badge > 0 && (
                   <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
                     {item.badge > 99 ? '99+' : item.badge}
@@ -89,14 +91,15 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="px-8 mt-auto">
+      {/* Account — gắn liền ngay dưới nav */}
+      <div className="px-8 mt-6">
         <Link href="/profile" className="block p-4 bg-white/60 rounded-2xl backdrop-blur-sm hover:bg-white/80 transition-all">
-          <p className="text-[10px] uppercase tracking-widest text-emerald-900/40 font-bold mb-3">Tài khoản</p>
+          <p className="text-[10px] uppercase tracking-widest text-emerald-900/40 font-bold mb-2">Tài khoản</p>
           <div className="flex items-center gap-3">
             <img
               src={currentUser?.avatar || `https://i.pravatar.cc/40?u=${currentUser?.id ?? 'me'}`}
               alt={currentUser?.name || ''}
-              className="w-10 h-10 rounded-full border-2 border-emerald-100 object-cover"
+              className="w-9 h-9 rounded-full border-2 border-emerald-100 object-cover"
             />
             <div className="overflow-hidden">
               <p className="text-xs font-bold text-emerald-900 truncate">{currentUser?.name ?? '...'}</p>
