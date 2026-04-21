@@ -23,7 +23,7 @@ interface Comment {
 }
 
 export function PostCard({ post }: PostCardProps) {
-  const [liked, setLiked] = useState(false)
+  const [liked, setLiked] = useState(post.isLiked ?? false)
   const [likeCount, setLikeCount] = useState(post.likes)
   const [showComments, setShowComments] = useState(false)
   const [comments, setComments] = useState<Comment[]>([])

@@ -21,6 +21,7 @@ export interface Post {
   likes: number
   comments: number
   image?: string
+  isLiked?: boolean
 }
 
 export interface Notification {

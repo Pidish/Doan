@@ -97,10 +97,12 @@ export async function GET(req: NextRequest) {
     let take = Number(searchParams.get("take"))
     if (isNaN(take) || take <= 0 || take > 50) take = 10
 
+    const authResult = verifyAccessToken(req)
+    const userId = authResult.success ? authResult.payload.id : null
+
     const posts = await prisma.post.findMany({
       where: {
         status: "ACTIVE",
-        // ✅ Filter theo category
         ...(category && category !== 'DANH_CHO_BAN' && { category: category as any })
       },
       orderBy: { createdAt: "desc" },
@@ -110,6 +112,9 @@ export async function GET(req: NextRequest) {
         author: {
           select: { id: true, name: true, email: true, avatar: true }
         },
+        ...(userId && {
+          likes: { where: { userId }, select: { userId: true } }
+        }),
         _count: {
           select: { likes: true, comments: true }
         }
@@ -122,7 +127,12 @@ export async function GET(req: NextRequest) {
       nextCursor = nextItem?.id ?? null
     }
 
-    return NextResponse.json({ data: posts, nextCursor })
+    const data = posts.map(p => {
+      const { likes, ...rest } = p as typeof p & { likes?: { userId: string }[] }
+      return { ...rest, isLiked: userId ? (likes?.length ?? 0) > 0 : false }
+    })
+
+    return NextResponse.json({ data, nextCursor })
 
   } catch (error) {
     console.error("GET /api/posts error:", error)

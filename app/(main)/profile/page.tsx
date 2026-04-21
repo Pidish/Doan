@@ -21,6 +21,7 @@ interface Post {
   content: string
   imageUrl?: string
   createdAt: string
+  isLiked?: boolean
   author: { id: string; name: string; email: string; avatar?: string }
   _count: { likes: number; comments: number }
 }
@@ -249,6 +250,7 @@ export default function ProfilePage() {
                       timestamp: new Date(post.createdAt).toLocaleDateString('vi-VN'),
                       likes: post._count.likes,
                       comments: post._count.comments,
+                      isLiked: post.isLiked,
                       author: {
                         id: post.author.id,
                         name: post.author.name,
