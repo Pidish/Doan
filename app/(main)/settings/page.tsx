@@ -47,7 +47,8 @@ export default function SettingsPage() {
   const [showLogoutModal, setShowLogoutModal] = useState(false)
 
   // Giao diện
-  const [theme, setTheme] = useState('light')
+  const [theme, setTheme] = useState('light')       // applied theme
+  const [pendingTheme, setPendingTheme] = useState('light') // selected but not confirmed
   const [compactMode, setCompactMode] = useState(false)
   const [autoplay, setAutoplay] = useState(false)
 
@@ -84,7 +85,7 @@ export default function SettingsPage() {
     if (s) {
       try {
         const p = JSON.parse(s)
-        if (p.theme) setTheme(p.theme)
+        if (p.theme) { setTheme(p.theme); setPendingTheme(p.theme) }
         if (p.compactMode !== undefined) setCompactMode(p.compactMode)
         if (p.autoplay !== undefined) setAutoplay(p.autoplay)
         if (p.privateAccount !== undefined) setPrivateAccount(p.privateAccount)
@@ -213,28 +214,52 @@ export default function SettingsPage() {
               <>
                 <h3 className="text-xl font-bold text-gray-900">Giao diện</h3>
                 <Section title="Chế độ hiển thị">
-                  <div className="p-4">
+                  <div className="p-4 space-y-4">
                     <div className="grid grid-cols-3 gap-4">
                       {themes.map(t => (
                         <button
                           key={t.key}
-                          onClick={() => {
-                            setTheme(t.key)
-                            savePrefs({ theme: t.key })
-                            window.dispatchEvent(new CustomEvent('nexora-theme', { detail: t.key }))
-                          }}
+                          onClick={() => setPendingTheme(t.key)}
                           className="space-y-2 group"
                         >
-                          <div className={`aspect-video ${t.bg} rounded-xl border-2 transition-all flex flex-col justify-center items-center gap-1 ${theme === t.key ? 'border-emerald-600 shadow-md' : 'border-gray-200'}`}>
+                          <div className={`aspect-video ${t.bg} rounded-xl border-2 transition-all flex flex-col justify-center items-center gap-1
+                            ${pendingTheme === t.key ? 'border-emerald-600 shadow-md scale-[1.03]' : 'border-gray-200 hover:border-gray-300'}`}>
                             <div className={`w-8 h-1.5 ${t.bar} rounded-full`} />
                             <div className={`w-5 h-1 ${t.bar} rounded-full opacity-60`} />
                           </div>
-                          <p className={`text-center text-sm font-bold ${theme === t.key ? 'text-emerald-700' : 'text-gray-400'}`}>
-                            {t.label} {theme === t.key && <Check className="inline w-3.5 h-3.5 mb-0.5" />}
+                          <p className={`text-center text-sm font-bold transition-colors ${pendingTheme === t.key ? 'text-emerald-700' : 'text-gray-400'}`}>
+                            {t.label}
+                            {theme === t.key && pendingTheme === t.key && <Check className="inline w-3.5 h-3.5 mb-0.5 ml-1" />}
                           </p>
                         </button>
                       ))}
                     </div>
+
+                    {pendingTheme !== theme && (
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <p className="text-sm text-gray-400">
+                          Chuyển sang <span className="font-semibold text-gray-600">{themes.find(t => t.key === pendingTheme)?.label}</span>
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setPendingTheme(theme)}
+                            className="px-4 py-2 rounded-full text-sm font-semibold text-gray-500 hover:bg-gray-100 transition-all"
+                          >
+                            Hủy
+                          </button>
+                          <button
+                            onClick={() => {
+                              setTheme(pendingTheme)
+                              savePrefs({ theme: pendingTheme })
+                              window.dispatchEvent(new CustomEvent('nexora-theme', { detail: pendingTheme }))
+                            }}
+                            className="px-5 py-2 rounded-full text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-all"
+                          >
+                            Xác nhận
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </Section>
                 <Section title="Cài đặt nâng cao">
