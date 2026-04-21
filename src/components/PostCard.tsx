@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Heart, MessageCircle, Share2, MoreHorizontal, Send, X } from 'lucide-react'
 import { Post } from '../types'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -151,15 +152,17 @@ export function PostCard({ post }: PostCardProps) {
     >
       <div className="p-6">
         <div className="flex gap-4">
-          <img
-            src={post.author.avatar || `https://i.pravatar.cc/48?u=${post.author.id}`}
-            alt={post.author.name}
-            className="w-12 h-12 rounded-full object-cover shrink-0"
-          />
+          <Link href={`/profile/${post.author.id}`} className="shrink-0">
+            <img
+              src={post.author.avatar || `https://i.pravatar.cc/48?u=${post.author.id}`}
+              alt={post.author.name}
+              className="w-12 h-12 rounded-full object-cover hover:opacity-90 transition-opacity"
+            />
+          </Link>
           <div className="flex-1">
             <div className="flex justify-between items-start mb-2">
               <div>
-                <h4 className="font-bold text-gray-900">{post.author.name}</h4>
+                <Link href={`/profile/${post.author.id}`} className="font-bold text-gray-900 hover:text-emerald-700 transition-colors">{post.author.name}</Link>
                 <span className="text-xs text-gray-400">
                   {typeof post.timestamp === 'string' && post.timestamp.includes('trước')
                     ? post.timestamp
@@ -235,11 +238,13 @@ export function PostCard({ post }: PostCardProps) {
               ) : (
                 comments.map(comment => (
                   <div key={comment.id} className="flex gap-3">
-                    <img
-                      src={comment.author.avatar || `https://i.pravatar.cc/32?u=${comment.author.id}`}
-                      alt={comment.author.name}
-                      className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-                    />
+                    <Link href={`/profile/${comment.author.id}`} className="flex-shrink-0">
+                      <img
+                        src={comment.author.avatar || `https://i.pravatar.cc/32?u=${comment.author.id}`}
+                        alt={comment.author.name}
+                        className="w-8 h-8 rounded-full object-cover hover:opacity-90 transition-opacity"
+                      />
+                    </Link>
                     <div className="flex-1 bg-gray-50 rounded-2xl px-4 py-2.5">
                       <div className="flex items-baseline gap-2 mb-1">
                         <span className="font-semibold text-sm text-gray-900">{comment.author.name}</span>

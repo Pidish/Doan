@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { ArrowLeft, Heart, MessageCircle, Loader2, Send } from 'lucide-react'
 
 interface Liker {
@@ -126,13 +127,15 @@ export default function PostDetailPage() {
       {/* Post */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-4">
         <div className="flex items-start gap-4 mb-4">
-          <img
-            src={post.author.avatar || `https://i.pravatar.cc/48?u=${post.author.id}`}
-            alt={post.author.name}
-            className="w-12 h-12 rounded-full object-cover flex-shrink-0"
-          />
+          <Link href={`/profile/${post.author.id}`} className="flex-shrink-0">
+            <img
+              src={post.author.avatar || `https://i.pravatar.cc/48?u=${post.author.id}`}
+              alt={post.author.name}
+              className="w-12 h-12 rounded-full object-cover hover:opacity-90 transition-opacity"
+            />
+          </Link>
           <div>
-            <p className="font-bold text-gray-900">{post.author.name}</p>
+            <Link href={`/profile/${post.author.id}`} className="font-bold text-gray-900 hover:text-emerald-700 transition-colors">{post.author.name}</Link>
             <p className="text-xs text-gray-400">@{post.author.email.split('@')[0]} · {timeAgo(post.createdAt)}</p>
           </div>
         </div>
@@ -168,14 +171,14 @@ export default function PostDetailPage() {
           </h3>
           <div className="flex flex-wrap gap-3">
             {likers.map(({ user }) => (
-              <div key={user.id} className="flex items-center gap-2 bg-gray-50 rounded-full px-3 py-1.5">
+              <Link key={user.id} href={`/profile/${user.id}`} className="flex items-center gap-2 bg-gray-50 hover:bg-emerald-50 rounded-full px-3 py-1.5 transition-colors">
                 <img
                   src={user.avatar || `https://i.pravatar.cc/28?u=${user.id}`}
                   alt={user.name}
                   className="w-6 h-6 rounded-full object-cover"
                 />
                 <span className="text-sm font-medium text-gray-700">{user.name}</span>
-              </div>
+              </Link>
             ))}
             {likeCount > 20 && (
               <div className="flex items-center px-3 py-1.5 text-sm text-gray-400">
@@ -198,14 +201,16 @@ export default function PostDetailPage() {
           ) : (
             post.comments.map(comment => (
               <div key={comment.id} className="flex gap-3 px-6 py-4">
-                <img
-                  src={comment.author.avatar || `https://i.pravatar.cc/36?u=${comment.author.id}`}
-                  alt={comment.author.name}
-                  className="w-9 h-9 rounded-full object-cover flex-shrink-0"
-                />
+                <Link href={`/profile/${comment.author.id}`} className="flex-shrink-0">
+                  <img
+                    src={comment.author.avatar || `https://i.pravatar.cc/36?u=${comment.author.id}`}
+                    alt={comment.author.name}
+                    className="w-9 h-9 rounded-full object-cover hover:opacity-90 transition-opacity"
+                  />
+                </Link>
                 <div className="flex-1 bg-gray-50 rounded-2xl px-4 py-3">
                   <div className="flex items-baseline gap-2 mb-1">
-                    <span className="font-semibold text-sm text-gray-900">{comment.author.name}</span>
+                    <Link href={`/profile/${comment.author.id}`} className="font-semibold text-sm text-gray-900 hover:text-emerald-700 transition-colors">{comment.author.name}</Link>
                     <span className="text-xs text-gray-400">{timeAgo(comment.createdAt)}</span>
                   </div>
                   <p className="text-sm text-gray-700">{comment.content}</p>
