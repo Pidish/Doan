@@ -29,7 +29,9 @@ export default function LoginPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error || 'Đăng nhập thất bại')
+        if (res.status === 404) setError('Email không tồn tại')
+        else if (res.status === 401) setError('Mật khẩu không đúng')
+        else setError(data.error || 'Đăng nhập thất bại, vui lòng thử lại')
         return
       }
 

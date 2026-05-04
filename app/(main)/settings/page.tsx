@@ -6,7 +6,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-interface UserProfile { id: string; name: string; email: string; avatar?: string; bio?: string }
+interface UserProfile {
+  id: string; name: string; email: string; avatar?: string; bio?: string
+  isPrivate: boolean; showOnlineStatus: boolean; allowMessages: boolean; allowSearch: boolean
+}
 
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -78,9 +81,21 @@ export default function SettingsPage() {
     const token = localStorage.getItem('accessToken')
     if (!token) return
     fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json()).then(d => setUser(d.data)).catch(() => {})
+      .then(r => r.json())
+      .then(d => {
+        const u = d.data
+        setUser(u)
+        // Load privacy from DB
+        if (u) {
+          setPrivateAccount(u.isPrivate ?? false)
+          setShowOnline(u.showOnlineStatus ?? true)
+          setAllowDm(u.allowMessages ?? true)
+          setAllowSearch(u.allowSearch ?? true)
+        }
+      })
+      .catch(() => {})
 
-    // Load saved prefs
+    // Load UI/notification prefs from localStorage
     const s = localStorage.getItem('nexora_settings')
     if (s) {
       try {
@@ -88,10 +103,6 @@ export default function SettingsPage() {
         if (p.theme) { setTheme(p.theme); setPendingTheme(p.theme) }
         if (p.compactMode !== undefined) setCompactMode(p.compactMode)
         if (p.autoplay !== undefined) setAutoplay(p.autoplay)
-        if (p.privateAccount !== undefined) setPrivateAccount(p.privateAccount)
-        if (p.showOnline !== undefined) setShowOnline(p.showOnline)
-        if (p.allowDm !== undefined) setAllowDm(p.allowDm)
-        if (p.allowSearch !== undefined) setAllowSearch(p.allowSearch)
         if (p.notifLike !== undefined) setNotifLike(p.notifLike)
         if (p.notifComment !== undefined) setNotifComment(p.notifComment)
         if (p.notifFollow !== undefined) setNotifFollow(p.notifFollow)
@@ -105,6 +116,17 @@ export default function SettingsPage() {
     const s = localStorage.getItem('nexora_settings')
     const current = s ? JSON.parse(s) : {}
     localStorage.setItem('nexora_settings', JSON.stringify({ ...current, ...patch }))
+  }
+
+  const savePrivacy = async (patch: Record<string, boolean>) => {
+    const token = localStorage.getItem('accessToken')
+    if (!token) return
+    await fetch('/api/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patch)
+    }).catch(() => {})
+    window.dispatchEvent(new CustomEvent('privacy-updated'))
   }
 
   const handleChangePassword = async () => {
@@ -329,15 +351,15 @@ export default function SettingsPage() {
                 <h3 className="text-xl font-bold text-gray-900">Quyền riêng tư</h3>
                 <Section title="Tài khoản">
                   <Row label="Tài khoản riêng tư" desc="Chỉ người theo dõi mới thấy bài viết"
-                    right={<Toggle on={privateAccount} onChange={v => { setPrivateAccount(v); savePrefs({ privateAccount: v }) }} />} />
+                    right={<Toggle on={privateAccount} onChange={v => { setPrivateAccount(v); savePrivacy({ isPrivate: v }) }} />} />
                   <Row label="Hiển thị trạng thái online" desc="Người khác thấy bạn đang hoạt động"
-                    right={<Toggle on={showOnline} onChange={v => { setShowOnline(v); savePrefs({ showOnline: v }) }} />} />
+                    right={<Toggle on={showOnline} onChange={v => { setShowOnline(v); savePrivacy({ showOnlineStatus: v }) }} />} />
                 </Section>
                 <Section title="Tương tác">
                   <Row label="Cho phép nhắn tin" desc="Ai có thể gửi tin nhắn trực tiếp"
-                    right={<Toggle on={allowDm} onChange={v => { setAllowDm(v); savePrefs({ allowDm: v }) }} />} />
+                    right={<Toggle on={allowDm} onChange={v => { setAllowDm(v); savePrivacy({ allowMessages: v }) }} />} />
                   <Row label="Xuất hiện trong tìm kiếm" desc="Người khác có thể tìm thấy bạn"
-                    right={<Toggle on={allowSearch} onChange={v => { setAllowSearch(v); savePrefs({ allowSearch: v }) }} />} />
+                    right={<Toggle on={allowSearch} onChange={v => { setAllowSearch(v); savePrivacy({ allowSearch: v }) }} />} />
                 </Section>
               </>
             )}

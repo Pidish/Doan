@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, UserPlus, Heart, AtSign, Loader2, Check } from 'lucide-react'
+import { Bell, UserPlus, Heart, AtSign, Loader2, Check, ShieldAlert } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 interface Notification {
@@ -31,6 +31,7 @@ export default function NotificationsPage() {
     { key: 'FOLLOW', icon: UserPlus, label: 'Theo dõi' },
     { key: 'LIKE', icon: Heart, label: 'Lượt thích' },
     { key: 'COMMENT', icon: AtSign, label: 'Bình luận' },
+    { key: 'WARNING', icon: ShieldAlert, label: 'Kiểm duyệt' },
   ]
 
   useEffect(() => {
@@ -89,6 +90,7 @@ export default function NotificationsPage() {
       case 'FOLLOW': return <UserPlus className="w-4 h-4" />
       case 'LIKE': return <Heart className="w-4 h-4 fill-current" />
       case 'COMMENT': return <AtSign className="w-4 h-4" />
+      case 'WARNING': return <Bell className="w-4 h-4" />
       default: return <Bell className="w-4 h-4" />
     }
   }
@@ -98,6 +100,7 @@ export default function NotificationsPage() {
       case 'FOLLOW': return 'bg-emerald-600 text-white'
       case 'LIKE': return 'bg-rose-500 text-white'
       case 'COMMENT': return 'bg-blue-500 text-white'
+      case 'WARNING': return 'bg-amber-500 text-white'
       default: return 'bg-gray-500 text-white'
     }
   }
@@ -207,8 +210,9 @@ export default function NotificationsPage() {
                       router.push(`/profile`)
                     }
                   }}
-                  className={`flex items-start gap-4 px-6 py-4 cursor-pointer transition-all hover:bg-gray-50 ${
-                    !notif.isRead ? 'bg-emerald-50/30' : ''
+                  className={`flex items-start gap-4 px-6 py-4 cursor-pointer transition-all hover:bg-gray-50 group ${
+                    notif.type === 'WARNING' && !notif.isRead ? 'bg-amber-50/60 hover:bg-amber-50/80' :
+                    !notif.isRead ? 'bg-emerald-50/40 hover:bg-emerald-50/60' : ''
                   }`}
                 >
                   {/* Avatar + Icon */}
@@ -216,7 +220,7 @@ export default function NotificationsPage() {
                     <img
                       src={notif.sender?.avatar || `https://i.pravatar.cc/48?u=${notif.sender?.id}`}
                       alt={notif.sender?.name || 'User'}
-                      className="w-12 h-12 rounded-full object-cover"
+                      className="w-11 h-11 rounded-full object-cover ring-2 ring-white shadow-sm"
                     />
                     <div className={`absolute -bottom-1 -right-1 p-1 rounded-full border-2 border-white ${getIconBg(notif.type)}`}>
                       {getIcon(notif.type)}

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { Heart, MessageCircle, Share2, MoreHorizontal, Send, X } from 'lucide-react'
+import { Heart, MessageCircle, Share2, MoreHorizontal, Send, Bookmark, Link2, Copy, ExternalLink, Check, Repeat2, X, Loader2 } from 'lucide-react'
 import { Post } from '../types'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -31,15 +31,32 @@ export function PostCard({ post }: PostCardProps) {
   const [commentCount, setCommentCount] = useState(post.comments)
   const [loadingComments, setLoadingComments] = useState(false)
   const [posting, setPosting] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [showShare, setShowShare] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'link' | 'text'>('idle')
+  const [saved, setSaved] = useState(false)
+  const [showRepostModal, setShowRepostModal] = useState(false)
+  const [repostCaption, setRepostCaption] = useState('')
+  const [reposting, setReposting] = useState(false)
+  const [reposted, setReposted] = useState(false)
+  const [repostCount, setRepostCount] = useState(post.reposts ?? 0)
+  const shareRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showShare) return
+    const handler = (e: MouseEvent) => {
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
+        setShowShare(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showShare])
 
   const token = typeof window !== 'undefined'
     ? localStorage.getItem('accessToken')
     : null
 
-  // ─── Like ────────────────────────────────────────────────────
   const handleLike = async () => {
-    // Optimistic update
     const prevLiked = liked
     const prevCount = likeCount
     setLiked(!liked)
@@ -60,7 +77,6 @@ export function PostCard({ post }: PostCardProps) {
     }
   }
 
-  // ─── Load Comments ───────────────────────────────────────────
   const handleToggleComments = async () => {
     if (!showComments && comments.length === 0) {
       setLoadingComments(true)
@@ -79,7 +95,6 @@ export function PostCard({ post }: PostCardProps) {
     setShowComments(!showComments)
   }
 
-  // ─── Post Comment ────────────────────────────────────────────
   const handlePostComment = async () => {
     if (!newComment.trim()) return
     setPosting(true)
@@ -116,27 +131,46 @@ export function PostCard({ post }: PostCardProps) {
     }
   }
 
-  // ─── Share ───────────────────────────────────────────────────
-  const handleShare = async () => {
-    const url = `${window.location.origin}/home`
-    const text = post.content.slice(0, 100) + '...'
+  const postUrl = typeof window !== 'undefined' ? `${window.location.origin}/posts/${post.id}` : ''
 
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(postUrl)
+    setCopyState('link')
+    setTimeout(() => { setCopyState('idle'); setShowShare(false) }, 1500)
+  }
+
+  const copyText = async () => {
+    await navigator.clipboard.writeText(post.content)
+    setCopyState('text')
+    setTimeout(() => { setCopyState('idle'); setShowShare(false) }, 1500)
+  }
+
+  const nativeShare = async () => {
+    await navigator.share({ title: `${post.author.name} trên Nexora`, text: post.content.slice(0, 100), url: postUrl })
+    setShowShare(false)
+  }
+
+  const handleRepost = async () => {
+    setReposting(true)
     try {
-      // ✅ Dùng Web Share API nếu browser hỗ trợ
-      if (navigator.share) {
-        await navigator.share({
-          title: `${post.author.name} trên Nexora`,
-          text: text,
-          url: url,
-        })
+      const res = await fetch('/api/posts/repost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ postId: post.id, caption: repostCaption }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setReposted(true)
+        setRepostCount(c => c + 1)
+        setShowRepostModal(false)
+        setRepostCaption('')
       } else {
-        // Fallback — copy link
-        await navigator.clipboard.writeText(url)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        alert(data.error || 'Không thể repost')
       }
-    } catch (err) {
-      console.error('Share error:', err)
+    } catch {
+      alert('Lỗi kết nối')
+    } finally {
+      setReposting(false)
     }
   }
 
@@ -145,85 +179,197 @@ export function PostCard({ post }: PostCardProps) {
     const mins = Math.floor(diff / 60000)
     const hours = Math.floor(diff / 3600000)
     const days = Math.floor(diff / 86400000)
-    if (mins < 60) return `${mins} phút trước`
-    if (hours < 24) return `${hours} giờ trước`
-    return `${days} ngày trước`
+    if (mins < 1) return 'vừa xong'
+    if (mins < 60) return `${mins} phút`
+    if (hours < 24) return `${hours} giờ`
+    return `${days} ngày`
   }
 
   return (
+    <>
     <motion.article
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+      className="bg-white rounded-2xl shadow-sm hover:shadow-md border border-gray-100 overflow-hidden transition-shadow duration-300 group"
     >
-      <div className="p-6">
-        <div className="flex gap-4">
-          <Link href={`/profile/${post.author.id}`} className="shrink-0">
+      <div className="p-5 md:p-6">
+        {/* Repost label */}
+        {post.repost && (
+          <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium mb-3 -mt-1">
+            <Repeat2 className="w-3.5 h-3.5 text-emerald-500" />
+            <span><span className="font-semibold text-emerald-600">{post.author.name}</span> đã chia sẻ bài viết</span>
+          </div>
+        )}
+
+        {/* Author row */}
+        <div className="flex gap-3 mb-4">
+          <Link href={`/profile/${post.repost ? post.repost.author.id : post.author.id}`} className="shrink-0 mt-0.5">
             <img
-              src={post.author.avatar || `https://i.pravatar.cc/48?u=${post.author.id}`}
-              alt={post.author.name}
-              className="w-12 h-12 rounded-full object-cover hover:opacity-90 transition-opacity"
+              src={(post.repost ? post.repost.author.avatar : post.author.avatar) || `https://i.pravatar.cc/48?u=${post.repost ? post.repost.author.id : post.author.id}`}
+              alt={post.repost ? post.repost.author.name : post.author.name}
+              className="w-10 h-10 rounded-full object-cover ring-2 ring-white hover:ring-emerald-300 transition-all"
             />
           </Link>
-          <div className="flex-1">
-            <div className="flex justify-between items-start mb-2">
-              <div>
-                <Link href={`/profile/${post.author.id}`} className="font-bold text-gray-900 hover:text-emerald-700 transition-colors">{post.author.name}</Link>
-                <span className="text-xs text-gray-400">
-                  {typeof post.timestamp === 'string' && post.timestamp.includes('trước')
-                    ? post.timestamp
-                    : timeAgo(post.timestamp)}
-                </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <Link href={`/profile/${post.repost ? post.repost.author.id : post.author.id}`} className="font-bold text-gray-900 hover:text-emerald-700 transition-colors text-sm leading-tight block truncate">
+                  {post.repost ? post.repost.author.name : post.author.name}
+                </Link>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {post.repost
+                    ? `@${post.repost.author.email.split('@')[0]} · ${timeAgo(post.repost.createdAt)} trước`
+                    : `${post.author.handle} · ${typeof post.timestamp === 'string' && post.timestamp.includes('trước') ? post.timestamp : timeAgo(post.timestamp) + ' trước'}`
+                  }
+                </p>
               </div>
-              <button className="text-gray-400 hover:text-emerald-700 transition-colors">
-                <MoreHorizontal className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-gray-800 mb-4 leading-relaxed">{post.content}</p>
-
-            {post.image && (
-              <div className="rounded-xl overflow-hidden mb-4 bg-gray-100">
-                <img
-                  src={post.image}
-                  alt="Post content"
-                  className="w-full h-auto aspect-video object-cover hover:scale-105 transition-transform duration-700"
-                />
-              </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex items-center gap-6 text-gray-400">
-              {/* Like */}
-              <button
-                onClick={handleLike}
-                className={`flex items-center gap-1.5 transition-all active:scale-90 ${liked ? 'text-rose-500' : 'hover:text-rose-500'
-                  }`}
-              >
-                <Heart className={`w-5 h-5 ${liked ? 'fill-current' : ''}`} />
-                <span className="text-sm">{likeCount}</span>
-              </button>
-
-              {/* Comment */}
-              <button
-                onClick={handleToggleComments}
-                className="flex items-center gap-1.5 hover:text-blue-500 transition-colors active:scale-90"
-              >
-                <MessageCircle className="w-5 h-5" />
-                <span className="text-sm">{commentCount}</span>
-              </button>
-
-              {/* Share */}
-              <button
-                onClick={handleShare}
-                className={`flex items-center gap-1.5 transition-colors active:scale-90 ml-auto ${copied ? 'text-emerald-600' : 'hover:text-emerald-600'
-                  }`}
-              >
-                <Share2 className="w-5 h-5" />
-                {copied && <span className="text-xs font-medium">Đã copy!</span>}
+              <button className="text-gray-300 hover:text-gray-500 transition-colors p-1 rounded-full hover:bg-gray-100 flex-shrink-0 -mt-0.5">
+                <MoreHorizontal className="w-4 h-4" />
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Caption (when repost has caption) */}
+        {post.repost && post.content && (
+          <p className="text-gray-500 text-sm italic mb-3">"{post.content}"</p>
+        )}
+
+        {/* Content — show repost's content or normal content */}
+        {!post.repost && (
+          <p className="text-gray-800 text-sm leading-relaxed mb-4">{post.content}</p>
+        )}
+
+        {/* Embedded original post (repost) */}
+        {post.repost && (
+          <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50/60">
+            <p className="text-gray-800 text-sm leading-relaxed">{post.repost.content}</p>
+          </div>
+        )}
+
+        {/* Image */}
+        {post.image && (
+          <div className="rounded-xl overflow-hidden mb-4 bg-gray-50 border border-gray-100">
+            <img
+              src={post.image}
+              alt="Post content"
+              className="w-full h-auto object-cover hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+            />
+          </div>
+        )}
+
+        {/* Action bar */}
+        <div className="flex items-center gap-1 -mx-1.5">
+          {/* Like */}
+          <button
+            onClick={handleLike}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-sm font-medium transition-all active:scale-90 ${
+              liked ? 'text-rose-500 bg-rose-50' : 'text-gray-400 hover:text-rose-500 hover:bg-rose-50'
+            }`}
+          >
+            <Heart className={`w-4 h-4 transition-all ${liked ? 'fill-current scale-110' : ''}`} />
+            <span>{likeCount}</span>
+          </button>
+
+          {/* Comment */}
+          <button
+            onClick={handleToggleComments}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-sm font-medium transition-all active:scale-90 ${
+              showComments ? 'text-blue-500 bg-blue-50' : 'text-gray-400 hover:text-blue-500 hover:bg-blue-50'
+            }`}
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span>{commentCount}</span>
+          </button>
+
+          {/* Repost count */}
+          <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-sm font-medium ${reposted ? 'text-emerald-600' : 'text-gray-400'}`}>
+            <Repeat2 className="w-4 h-4" />
+            <span>{repostCount}</span>
+          </div>
+
+          {/* Share */}
+          <div ref={shareRef} className="relative">
+            <button
+              onClick={() => setShowShare(v => !v)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-sm font-medium transition-all active:scale-90 ${
+                showShare ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50'
+              }`}
+            >
+              <Share2 className="w-4 h-4" />
+            </button>
+
+            <AnimatePresence>
+              {showShare && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.92, y: 6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.92, y: 6 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-0 bottom-full mb-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-30"
+                >
+                  <div className="px-4 py-2.5 border-b border-gray-50">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Chia sẻ bài viết</p>
+                  </div>
+
+                  {/* Repost on Nexora */}
+                  {!post.repost && (
+                    <button
+                      onClick={() => { setShowShare(false); setShowRepostModal(true) }}
+                      className={`flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors border-b border-gray-50 ${
+                        reposted ? 'text-emerald-600 bg-emerald-50/50' : 'text-gray-700 hover:bg-emerald-50'
+                      }`}
+                    >
+                      <Repeat2 className={`w-4 h-4 flex-shrink-0 ${reposted ? 'text-emerald-500' : 'text-gray-400'}`} />
+                      <span className={reposted ? 'font-semibold' : ''}>
+                        {reposted ? 'Đã đăng lại' : 'Đăng lại trên Nexora'}
+                      </span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={copyLink}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    {copyState === 'link' ? <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <Link2 className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                    <span className={copyState === 'link' ? 'text-emerald-600 font-semibold' : ''}>
+                      {copyState === 'link' ? 'Đã sao chép!' : 'Sao chép liên kết'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={copyText}
+                    className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    {copyState === 'text' ? <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <Copy className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                    <span className={copyState === 'text' ? 'text-emerald-600 font-semibold' : ''}>
+                      {copyState === 'text' ? 'Đã sao chép!' : 'Sao chép nội dung'}
+                    </span>
+                  </button>
+
+                  {typeof navigator !== 'undefined' && 'share' in navigator && (
+                    <button
+                      onClick={nativeShare}
+                      className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-50"
+                    >
+                      <ExternalLink className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      <span>Chia sẻ qua ứng dụng</span>
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Bookmark */}
+          <button
+            onClick={() => setSaved(!saved)}
+            className={`ml-auto flex items-center px-2.5 py-1.5 rounded-full text-sm transition-all active:scale-90 ${
+              saved ? 'text-amber-500 bg-amber-50' : 'text-gray-400 hover:text-amber-500 hover:bg-amber-50'
+            }`}
+          >
+            <Bookmark className={`w-4 h-4 ${saved ? 'fill-current' : ''}`} />
+          </button>
         </div>
       </div>
 
@@ -234,29 +380,29 @@ export function PostCard({ post }: PostCardProps) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="border-t border-gray-100"
+            className="border-t border-gray-100 bg-gray-50/60"
           >
-            <div className="p-4 space-y-4 max-h-80 overflow-y-auto">
+            <div className="p-4 space-y-3 max-h-72 overflow-y-auto">
               {loadingComments ? (
-                <p className="text-center text-gray-400 text-sm py-4">Đang tải...</p>
+                <p className="text-center text-gray-400 text-xs py-4">Đang tải...</p>
               ) : comments.length === 0 ? (
-                <p className="text-center text-gray-400 text-sm py-4">Chưa có bình luận nào</p>
+                <p className="text-center text-gray-400 text-xs py-4">Chưa có bình luận nào · Hãy là người đầu tiên!</p>
               ) : (
                 comments.map(comment => (
-                  <div key={comment.id} className="flex gap-3">
+                  <div key={comment.id} className="flex gap-2.5">
                     <Link href={`/profile/${comment.author.id}`} className="flex-shrink-0">
                       <img
                         src={comment.author.avatar || `https://i.pravatar.cc/32?u=${comment.author.id}`}
                         alt={comment.author.name}
-                        className="w-8 h-8 rounded-full object-cover hover:opacity-90 transition-opacity"
+                        className="w-7 h-7 rounded-full object-cover"
                       />
                     </Link>
-                    <div className="flex-1 bg-gray-50 rounded-2xl px-4 py-2.5">
-                      <div className="flex items-baseline gap-2 mb-1">
-                        <span className="font-semibold text-sm text-gray-900">{comment.author.name}</span>
-                        <span className="text-xs text-gray-400">{timeAgo(comment.createdAt)}</span>
+                    <div className="flex-1 bg-white rounded-2xl rounded-tl-sm px-3.5 py-2.5 shadow-sm border border-gray-100">
+                      <div className="flex items-baseline gap-1.5 mb-0.5">
+                        <span className="font-semibold text-xs text-gray-900">{comment.author.name}</span>
+                        <span className="text-[10px] text-gray-400">{timeAgo(comment.createdAt)} trước</span>
                       </div>
-                      <p className="text-sm text-gray-700">{comment.content}</p>
+                      <p className="text-xs text-gray-700 leading-relaxed">{comment.content}</p>
                     </div>
                   </div>
                 ))
@@ -265,30 +411,99 @@ export function PostCard({ post }: PostCardProps) {
 
             {/* Comment Input */}
             <div className="px-4 pb-4">
-              <div className="flex gap-3 items-center">
-                <div className="w-8 h-8 rounded-full bg-emerald-100 flex-shrink-0"></div>
-                <div className="flex-1 flex gap-2 bg-gray-100 rounded-full px-4 py-2 items-center">
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={e => setNewComment(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handlePostComment()}
-                    placeholder="Viết bình luận..."
-                    className="flex-1 bg-transparent outline-none text-sm text-gray-900 placeholder:text-gray-400"
-                  />
-                  <button
-                    onClick={handlePostComment}
-                    disabled={!newComment.trim() || posting}
-                    className="text-emerald-600 hover:text-emerald-700 disabled:opacity-40 transition-colors"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
+              <div className="flex gap-2.5 items-center bg-white rounded-full px-4 py-2.5 shadow-sm border border-gray-200 focus-within:border-emerald-300 focus-within:ring-2 focus-within:ring-emerald-100 transition-all">
+                <input
+                  type="text"
+                  value={newComment}
+                  onChange={e => setNewComment(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handlePostComment()}
+                  placeholder="Viết bình luận..."
+                  className="flex-1 bg-transparent outline-none text-xs text-gray-900 placeholder:text-gray-400"
+                />
+                <button
+                  onClick={handlePostComment}
+                  disabled={!newComment.trim() || posting}
+                  className="text-emerald-600 hover:text-emerald-700 disabled:opacity-30 transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </motion.article>
+
+    {/* Repost Modal */}
+    <AnimatePresence>
+      {showRepostModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ duration: 0.15 }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Repeat2 className="w-4 h-4 text-emerald-600" />
+                <span className="font-bold text-gray-900">Đăng lại trên Nexora</span>
+              </div>
+              <button onClick={() => setShowRepostModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Caption input */}
+              <textarea
+                value={repostCaption}
+                onChange={e => setRepostCaption(e.target.value)}
+                placeholder="Thêm suy nghĩ của bạn... (không bắt buộc)"
+                className="w-full bg-gray-50 rounded-xl px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 resize-none outline-none focus:ring-2 focus:ring-emerald-200 border border-transparent focus:border-emerald-200 transition-all"
+                rows={3}
+                maxLength={300}
+              />
+
+              {/* Original post preview */}
+              <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                <div className="flex items-center gap-2 mb-2">
+                  <img
+                    src={post.author.avatar || `https://i.pravatar.cc/24?u=${post.author.id}`}
+                    className="w-6 h-6 rounded-full object-cover"
+                    alt={post.author.name}
+                  />
+                  <span className="text-xs font-semibold text-gray-700">{post.author.name}</span>
+                </div>
+                <p className="text-sm text-gray-600 line-clamp-3">{post.content}</p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="px-5 pb-5 flex gap-3">
+              <button
+                onClick={() => setShowRepostModal(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-all"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleRepost}
+                disabled={reposting}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {reposting
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Đang đăng...</>
+                  : <><Repeat2 className="w-4 h-4" /> Đăng lại</>
+                }
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+    </>
   )
 }

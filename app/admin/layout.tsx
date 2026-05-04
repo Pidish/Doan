@@ -20,23 +20,34 @@ export default function AdminLayout({
 
     useEffect(() => {
         const token = localStorage.getItem('accessToken')
-        const userStr = localStorage.getItem('user')
+        if (!token) { router.push('/login'); return }
 
-        if (!token || !userStr) {
-            router.push('/login')
-            return
-        }
-
-        const user = JSON.parse(userStr)
-
-        // ✅ Chỉ ADMIN mới vào được
-        if (user.role !== 'ADMIN') {
-            router.push('/home')
-            return
-        }
-
-        setAdmin(user)
-        setLoading(false)
+        fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } })
+            .then(async res => {
+                if (res.status === 401) {
+                    // try refresh
+                    const refreshToken = localStorage.getItem('refreshToken')
+                    if (!refreshToken) { router.push('/login'); return }
+                    const rr = await fetch('/api/auth/refresh', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ refreshToken }),
+                    })
+                    if (!rr.ok) { router.push('/login'); return }
+                    const { accessToken } = await rr.json()
+                    localStorage.setItem('accessToken', accessToken)
+                    return fetch('/api/me', { headers: { Authorization: `Bearer ${accessToken}` } })
+                }
+                return res
+            })
+            .then(res => res?.json())
+            .then(data => {
+                if (!data?.data) { router.push('/login'); return }
+                if (data.data.role !== 'ADMIN') { router.push('/home'); return }
+                setAdmin(data.data)
+                setLoading(false)
+            })
+            .catch(() => router.push('/login'))
     }, [router])
 
     const handleLogout = () => {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Search, Shield, ShieldOff, Trash2, UserCheck, UserX, Loader2 } from 'lucide-react'
+import { fetchWithAuth } from '@/lib/fetchWithAuth'
 
 interface User {
     id: string
@@ -22,15 +23,12 @@ export default function UsersPage() {
     const [actionLoading, setActionLoading] = useState<string | null>(null)
 
     const fetchUsers = async () => {
-        const token = localStorage.getItem('accessToken')
         try {
             const params = new URLSearchParams()
             if (search) params.append('search', search)
             if (roleFilter) params.append('role', roleFilter)
 
-            const res = await fetch(`/api/admin/users?${params}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
+            const res = await fetchWithAuth(`/api/admin/users?${params}`)
             const data = await res.json()
             setUsers(data.data || [])
         } catch (err) {
@@ -46,15 +44,11 @@ export default function UsersPage() {
 
     const handleToggleRole = async (user: User) => {
         setActionLoading(user.id)
-        const token = localStorage.getItem('accessToken')
         const newRole = user.role === 'ADMIN' ? 'USER' : 'ADMIN'
         try {
-            await fetch(`/api/admin/users/${user.id}`, {
+            await fetchWithAuth(`/api/admin/users/${user.id}`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ role: newRole })
             })
             setUsers(prev => prev.map(u =>
@@ -67,14 +61,10 @@ export default function UsersPage() {
 
     const handleToggleBan = async (user: User) => {
         setActionLoading(user.id + 'ban')
-        const token = localStorage.getItem('accessToken')
         try {
-            await fetch(`/api/admin/users/${user.id}`, {
+            await fetchWithAuth(`/api/admin/users/${user.id}`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ isActive: !user.isActive })
             })
             setUsers(prev => prev.map(u =>
@@ -88,12 +78,8 @@ export default function UsersPage() {
     const handleDelete = async (id: string) => {
         if (!confirm('Xóa user này? Không thể hoàn tác!')) return
         setActionLoading(id + 'del')
-        const token = localStorage.getItem('accessToken')
         try {
-            await fetch(`/api/admin/users/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            })
+            await fetchWithAuth(`/api/admin/users/${id}`, { method: 'DELETE' })
             setUsers(prev => prev.filter(u => u.id !== id))
         } finally {
             setActionLoading(null)

@@ -1,16 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, Eye, EyeOff, Trash2, ShieldAlert, Loader2 } from 'lucide-react'
+import { Search, Eye, EyeOff, Trash2, ShieldAlert, Loader2, Bot, RefreshCw } from 'lucide-react'
+import { fetchWithAuth } from '@/lib/fetchWithAuth'
 
 interface Post {
     id: string
     content: string
     status: string
     category: string
+    sentiment?: string
     createdAt: string
     author: { id: string; name: string; email: string; avatar?: string }
     _count: { likes: number; comments: number }
+    moderation?: { result: string; reason: string } | null
 }
 
 export default function PostsPage() {
@@ -19,17 +22,15 @@ export default function PostsPage() {
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState('')
     const [actionLoading, setActionLoading] = useState<string | null>(null)
+    const [moderating, setModerating] = useState<string | null>(null)
 
     const fetchPosts = async () => {
-        const token = localStorage.getItem('accessToken')
         try {
             const params = new URLSearchParams()
             if (search) params.append('search', search)
             if (statusFilter) params.append('status', statusFilter)
 
-            const res = await fetch(`/api/admin/posts?${params}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            })
+            const res = await fetchWithAuth(`/api/admin/posts?${params}`)
             const data = await res.json()
             setPosts(data.data || [])
         } catch (err) {
@@ -45,14 +46,10 @@ export default function PostsPage() {
 
     const handleStatus = async (id: string, status: string) => {
         setActionLoading(id + status)
-        const token = localStorage.getItem('accessToken')
         try {
-            await fetch(`/api/admin/posts/${id}`, {
+            await fetchWithAuth(`/api/admin/posts/${id}`, {
                 method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status })
             })
             setPosts(prev => prev.map(p => p.id === id ? { ...p, status } : p))
@@ -61,15 +58,31 @@ export default function PostsPage() {
         }
     }
 
+    const handleRemoderate = async (id: string) => {
+        setModerating(id)
+        try {
+            const res = await fetchWithAuth('/api/admin/moderate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ postId: id })
+            })
+            const data = await res.json()
+            if (res.ok) {
+                setPosts(prev => prev.map(p => p.id === id
+                    ? { ...p, status: data.data.status, moderation: data.moderation }
+                    : p
+                ))
+            }
+        } finally {
+            setModerating(null)
+        }
+    }
+
     const handleDelete = async (id: string) => {
         if (!confirm('Xóa post này? Không thể hoàn tác!')) return
         setActionLoading(id + 'del')
-        const token = localStorage.getItem('accessToken')
         try {
-            await fetch(`/api/admin/posts/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            })
+            await fetchWithAuth(`/api/admin/posts/${id}`, { method: 'DELETE' })
             setPosts(prev => prev.filter(p => p.id !== id))
         } finally {
             setActionLoading(null)
@@ -152,6 +165,18 @@ export default function PostsPage() {
                                     {post.content}
                                 </p>
 
+                                {/* AI Moderation result */}
+                                {post.moderation && (
+                                    <div className={`flex items-start gap-2 text-xs rounded-lg px-3 py-2 mb-3 ${
+                                        post.moderation.result === 'BLOCKED' ? 'bg-red-500/10 text-red-400'
+                                        : post.moderation.result === 'WARNING' ? 'bg-yellow-500/10 text-yellow-400'
+                                        : 'bg-emerald-500/10 text-emerald-400'
+                                    }`}>
+                                        <Bot className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                                        <span><span className="font-bold">AI:</span> {post.moderation.reason}</span>
+                                    </div>
+                                )}
+
                                 <div className="flex items-center justify-between">
                                     <div className="flex gap-4 text-xs text-gray-500">
                                         <span>❤️ {post._count.likes}</span>
@@ -161,6 +186,18 @@ export default function PostsPage() {
 
                                     {/* Actions */}
                                     <div className="flex gap-2">
+                                        <button
+                                            onClick={() => handleRemoderate(post.id)}
+                                            disabled={moderating === post.id}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 text-xs font-medium transition-all"
+                                            title="Kiểm duyệt lại bằng AI"
+                                        >
+                                            {moderating === post.id
+                                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                : <RefreshCw className="w-3.5 h-3.5" />
+                                            }
+                                            AI
+                                        </button>
                                         {post.status !== 'ACTIVE' && (
                                             <button
                                                 onClick={() => handleStatus(post.id, 'ACTIVE')}

@@ -12,12 +12,18 @@ model User {
   name      String
   email     String   @unique
   password  String
-  avatar    String?
-  bio       String?
-  role      RoleType @default(USER)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  avatar            String?
+  bio               String?
+  role              RoleType @default(USER)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Privacy settings
+  isPrivate         Boolean  @default(false)
+  showOnlineStatus  Boolean  @default(true)
+  allowMessages     Boolean  @default(true)
+  allowSearch       Boolean  @default(true)
 
   posts    Post[]
   comments Comment[]
@@ -48,14 +54,19 @@ model Post {
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
 
+  repostId  String?
+  repost    Post?          @relation("Reposts", fields: [repostId], references: [id], onDelete: SetNull)
+  reposts   Post[]         @relation("Reposts")
+
   author     User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   comments   Comment[]
   likes      Like[]
   moderation ModerationLog?
-category  CategoryType   @default(DANH_CHO_BAN)
+  category  CategoryType   @default(DANH_CHO_BAN)
   @@index([authorId])
   @@index([createdAt(sort: Desc)])
   @@index([status])
+  @@index([status, createdAt(sort: Desc)])
 }
 
 model Comment {
@@ -114,6 +125,7 @@ model Notification {
   sender User? @relation("NotificationSender", fields: [senderId], references: [id], onDelete: SetNull)
 
   @@index([userId, isRead])
+  @@index([userId, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
 }
 

@@ -26,6 +26,9 @@ export async function GET(req: NextRequest) {
                 },
                 _count: {
                     select: { likes: true, comments: true }
+                },
+                moderation: {
+                    select: { result: true, reason: true }
                 }
             },
             orderBy: { createdAt: 'desc' },

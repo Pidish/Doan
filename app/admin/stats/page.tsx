@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Loader2, TrendingUp, Award, Tag } from 'lucide-react'
+import { fetchWithAuth } from '@/lib/fetchWithAuth'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts'
 
 interface Stats {
@@ -21,11 +22,8 @@ export default function StatsPage() {
 
     useEffect(() => {
         const fetchStats = async () => {
-            const token = localStorage.getItem('accessToken')
             try {
-                const res = await fetch('/api/admin/stats', {
-                    headers: { Authorization: `Bearer ${token}` }
-                })
+                const res = await fetchWithAuth('/api/admin/stats')
                 const data = await res.json()
                 setStats(data)
             } finally {

@@ -11,6 +11,7 @@ interface CurrentUser {
   name: string
   email: string
   avatar?: string
+  showOnlineStatus?: boolean
 }
 
 export function Sidebar() {
@@ -22,27 +23,32 @@ export function Sidebar() {
     const token = localStorage.getItem('accessToken')
     if (!token) return
 
-    fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => setCurrentUser(d.data))
-      .catch(() => {})
+    // Parallel fetch: me + notifications
+    Promise.all([
+      fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+      fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
+    ]).then(([meData, notifData]) => {
+      if (meData?.data) setCurrentUser(meData.data)
+      setUnreadCount(notifData?.unreadCount ?? 0)
+    }).catch(() => {})
 
-    // Fetch unread notification count
-    const fetchUnread = () => {
-      fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } })
+    const onNotif = (e: Event) => setUnreadCount((e as CustomEvent<number>).detail)
+    window.addEventListener('notification-read', onNotif)
+
+    const onPrivacy = () => {
+      const t = localStorage.getItem('accessToken')
+      if (!t) return
+      fetch('/api/me', { headers: { Authorization: `Bearer ${t}` } })
         .then(r => r.json())
-        .then(d => setUnreadCount(d.unreadCount ?? 0))
+        .then(d => { if (d?.data) setCurrentUser(d.data) })
         .catch(() => {})
     }
-    fetchUnread()
+    window.addEventListener('privacy-updated', onPrivacy)
 
-    // Lắng nghe event khi đánh dấu đọc từ trang notifications
-    const onUpdate = (e: Event) => {
-      const count = (e as CustomEvent<number>).detail
-      setUnreadCount(count)
+    return () => {
+      window.removeEventListener('notification-read', onNotif)
+      window.removeEventListener('privacy-updated', onPrivacy)
     }
-    window.addEventListener('notification-read', onUpdate)
-    return () => window.removeEventListener('notification-read', onUpdate)
   }, [])
 
   const navItems = [
@@ -91,21 +97,21 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Account — gắn liền ngay dưới nav */}
-      <div className="px-8 mt-6">
-        <Link href="/profile" className="block p-4 bg-white/60 rounded-2xl backdrop-blur-sm hover:bg-white/80 transition-all">
-          <p className="text-[10px] uppercase tracking-widest text-emerald-900/40 font-bold mb-2">Tài khoản</p>
-          <div className="flex items-center gap-3">
-            <img
-              src={currentUser?.avatar || `https://i.pravatar.cc/40?u=${currentUser?.id ?? 'me'}`}
-              alt={currentUser?.name || ''}
-              className="w-9 h-9 rounded-full border-2 border-emerald-100 object-cover"
-            />
-            <div className="overflow-hidden">
-              <p className="text-xs font-bold text-emerald-900 truncate">{currentUser?.name ?? '...'}</p>
-              <p className="text-[10px] text-emerald-800/60 truncate">@{currentUser?.email?.split('@')[0] ?? ''}</p>
-            </div>
+      {/* Account */}
+      <div className="px-4 mt-6">
+        <Link href="/profile" className="flex items-center gap-3 p-4 bg-white/70 rounded-2xl hover:bg-white/90 transition-all shadow-sm border border-emerald-100/50 group">
+          <img
+            src={currentUser?.avatar || `https://i.pravatar.cc/40?u=${currentUser?.id ?? 'me'}`}
+            alt={currentUser?.name || ''}
+            className="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-sm flex-shrink-0"
+          />
+          <div className="overflow-hidden flex-1 min-w-0">
+            <p className="text-xs font-bold text-emerald-900 truncate group-hover:text-emerald-700 transition-colors">{currentUser?.name ?? '...'}</p>
+            <p className="text-[10px] text-emerald-800/50 truncate">@{currentUser?.email?.split('@')[0] ?? ''}</p>
           </div>
+          {currentUser?.showOnlineStatus !== false && (
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mr-1" />
+          )}
         </Link>
       </div>
     </aside>

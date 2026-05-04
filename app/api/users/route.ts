@@ -9,13 +9,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const currentUserId = result.payload.id
+
     const users = await prisma.user.findMany({
+      where: { id: { not: currentUserId }, role: 'USER' },
       select: {
         id: true,
         name: true,
         email: true,
         avatar: true,
         bio: true,
+        allowMessages: true,
+        showOnlineStatus: true,
         _count: {
           select: {
             followers: true,
@@ -24,7 +29,8 @@ export async function GET(req: NextRequest) {
           },
         },
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: 50,
     })
 
     // ✅ Wrap trong { data: [...] } để đồng nhất

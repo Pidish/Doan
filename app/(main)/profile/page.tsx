@@ -57,7 +57,7 @@ export default function ProfilePage() {
 
         const postsRes = await fetch('/api/posts', { headers: { Authorization: `Bearer ${token}` } })
         const postsData = await postsRes.json()
-        setPosts(postsData.data?.filter((p: Post) => p.author.id === userData.data.id) || [])
+        setPosts(postsData.data?.filter((p: Post) => p.author.id === userData.data?.id) || [])
       } catch (err) {
         console.error('Error:', err)
       } finally {
@@ -250,7 +250,9 @@ export default function ProfilePage() {
                       timestamp: new Date(post.createdAt).toLocaleDateString('vi-VN'),
                       likes: post._count.likes,
                       comments: post._count.comments,
+                      reposts: (post._count as any).reposts ?? 0,
                       isLiked: post.isLiked,
+                      repost: (post as any).repost ?? null,
                       author: {
                         id: post.author.id,
                         name: post.author.name,

@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
     const [users, posts] = await Promise.all([
       prisma.user.findMany({
         where: {
+          allowSearch: true,
           OR: [
             { name: { contains: q, mode: 'insensitive' } },
             { email: { contains: q, mode: 'insensitive' } },

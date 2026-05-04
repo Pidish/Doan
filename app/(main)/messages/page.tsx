@@ -9,6 +9,8 @@ interface User {
   name: string
   email: string
   avatar?: string
+  allowMessages?: boolean
+  showOnlineStatus?: boolean
 }
 
 interface Message {
@@ -183,6 +185,8 @@ export default function MessagesPage() {
   const filteredSuggested = suggestedUsers.filter(filterUser)
 
   const isFollowing = selectedUser ? followingIds.has(selectedUser.id) : false
+  const selectedAllowsMessages = selectedUser ? (selectedUser.allowMessages !== false) : true
+  const canChat = isFollowing && selectedAllowsMessages
 
   if (loading) return (
     <div className="flex justify-center items-center min-h-screen">
@@ -230,7 +234,9 @@ export default function MessagesPage() {
                 >
                   <div className="relative flex-shrink-0">
                     <img src={user.avatar || `https://i.pravatar.cc/48?u=${user.id}`} alt={user.name} className="w-12 h-12 rounded-full object-cover" />
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+                    {user.showOnlineStatus !== false && (
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm text-gray-900 truncate">{user.name}</p>
@@ -286,11 +292,15 @@ export default function MessagesPage() {
             <div className="flex items-center gap-3">
               <div className="relative">
                 <img src={selectedUser.avatar || `https://i.pravatar.cc/40?u=${selectedUser.id}`} className="w-10 h-10 rounded-full object-cover" alt={selectedUser.name} />
-                {isFollowing && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />}
+                {isFollowing && selectedUser.showOnlineStatus !== false && (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+                )}
               </div>
               <div>
                 <p className="font-bold text-gray-900 text-sm">{selectedUser.name}</p>
-                <p className="text-xs text-emerald-500">{isFollowing ? 'Đang hoạt động' : 'Chưa theo dõi'}</p>
+                <p className="text-xs text-gray-400">
+                  {!isFollowing ? 'Chưa theo dõi' : !selectedAllowsMessages ? 'Không nhận tin nhắn' : selectedUser.showOnlineStatus !== false ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -300,7 +310,7 @@ export default function MessagesPage() {
             </div>
           </div>
 
-          {/* Not following notice */}
+          {/* Notices */}
           {!isFollowing && (
             <div className="mx-6 mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
               <p className="text-sm text-amber-700">Theo dõi <span className="font-semibold">{selectedUser.name}</span> để bắt đầu trò chuyện</p>
@@ -311,6 +321,11 @@ export default function MessagesPage() {
               >
                 {followLoadingId === selectedUser.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><UserPlus className="w-3 h-3" /> Theo dõi</>}
               </button>
+            </div>
+          )}
+          {isFollowing && !selectedAllowsMessages && (
+            <div className="mx-6 mt-4 px-4 py-3 bg-gray-100 border border-gray-200 rounded-2xl">
+              <p className="text-sm text-gray-500 text-center"><span className="font-semibold">{selectedUser.name}</span> không nhận tin nhắn trực tiếp</p>
             </div>
           )}
 
@@ -370,24 +385,24 @@ export default function MessagesPage() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input — disabled if not following */}
+          {/* Input — disabled if not following or DMs not allowed */}
           <div className="p-4 bg-white border-t border-gray-100">
-            <div className={`flex items-center gap-3 bg-gray-100 rounded-full px-4 py-2 ${!isFollowing ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className={`flex items-center gap-3 bg-gray-100 rounded-full px-4 py-2 ${!canChat ? 'opacity-50 pointer-events-none' : ''}`}>
               <button className="text-gray-400 hover:text-emerald-600 transition-colors"><PlusCircle className="w-5 h-5" /></button>
               <button className="text-gray-400 hover:text-emerald-600 transition-colors"><Image className="w-5 h-5" /></button>
               <input
                 type="text"
-                placeholder={isFollowing ? 'Nhập tin nhắn...' : 'Theo dõi để nhắn tin...'}
+                placeholder={!isFollowing ? 'Theo dõi để nhắn tin...' : !selectedAllowsMessages ? 'Người dùng không nhận tin nhắn' : 'Nhập tin nhắn...'}
                 value={newMessage}
                 onChange={e => setNewMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
-                disabled={!isFollowing}
+                disabled={!canChat}
                 className="flex-1 bg-transparent border-none outline-none text-sm text-gray-900 placeholder:text-gray-400"
               />
               <button className="text-gray-400 hover:text-emerald-600 transition-colors"><Smile className="w-5 h-5" /></button>
               <button
                 onClick={sendMessage}
-                disabled={!newMessage.trim() || sending || !isFollowing}
+                disabled={!newMessage.trim() || sending || !canChat}
                 className="w-9 h-9 flex items-center justify-center bg-emerald-600 text-white rounded-full hover:bg-emerald-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
               >
                 {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

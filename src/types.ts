@@ -20,8 +20,15 @@ export interface Post {
   timestamp: string
   likes: number
   comments: number
+  reposts?: number
   image?: string
   isLiked?: boolean
+  repost?: {
+    id: string
+    content: string
+    createdAt: string
+    author: { id: string; name: string; email: string; avatar?: string }
+  } | null
 }
 
 export interface Notification {

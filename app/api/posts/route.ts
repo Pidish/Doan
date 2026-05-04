@@ -1,42 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyAccessToken } from "@/lib/auth"
-
-// ─── Phân loại bài viết ───────────────────────────────────────
-function classifyPost(content: string): string {
-  const text = content.toLowerCase()
-
-  const keywords: Record<string, string[]> = {
-    TINH_LANG: [
-      'thiền', 'bình yên', 'tĩnh lặng', 'hít thở', 'tâm trí', 'yên tĩnh',
-      'nghỉ ngơi', 'thư giãn', 'buông bỏ', 'hiện tại', 'chánh niệm',
-      'nội tâm', 'tâm hồn', 'mindful', 'peaceful', 'calm'
-    ],
-    SONG_XANH: [
-      'cây', 'rau', 'trồng', 'xanh', 'môi trường', 'thiên nhiên',
-      'ban công', 'vườn', 'tái chế', 'bền vững', 'hoa', 'rừng',
-      'biển', 'sạch', 'tiết kiệm', 'organic', 'plant', 'eco'
-    ],
-    SANG_TAO: [
-      'thiết kế', 'design', 'sáng tạo', 'nghệ thuật', 'vẽ', 'ui', 'ux',
-      'code', 'lập trình', 'project', 'ý tưởng', 'creative', 'màu sắc',
-      'typography', 'app', 'website', 'figma', 'portfolio'
-    ],
-    TAM_LY_HOC: [
-      'tâm lý', 'cảm xúc', 'lo lắng', 'stress', 'sợ hãi', 'tự tin',
-      'động lực', 'thói quen', 'phát triển bản thân', 'mindset',
-      'tư duy', 'hành vi', 'therapy', 'trị liệu', 'anxiety', 'growth'
-    ],
-  }
-
-  const scores: Record<string, number> = {}
-  for (const [cat, words] of Object.entries(keywords)) {
-    scores[cat] = words.filter(word => text.includes(word)).length
-  }
-
-  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0]
-  return best[1] > 0 ? best[0] : 'DANH_CHO_BAN'
-}
+import { moderateContent } from "@/lib/moderation"
 
 // POST /api/posts
 export async function POST(req: NextRequest) {
@@ -49,37 +14,79 @@ export async function POST(req: NextRequest) {
     const userId = result.payload.id
     const body = await req.json()
     const content = body?.content?.trim()
+    const imageUrl: string | undefined = body?.imageUrl || undefined
 
-    if (!content) {
+    if (!content && !imageUrl) {
       return NextResponse.json({ error: "Content is required" }, { status: 400 })
     }
 
-    if (content.length > 500) {
+    if (content && content.length > 500) {
       return NextResponse.json({ error: "Content must be under 500 characters" }, { status: 400 })
     }
 
-    // ✅ Gọi trong function
-    const category = classifyPost(content)
-    console.log('Category:', category)
+    const moderation = await moderateContent(content || '')
+    const category = moderation.category
+
+    const postStatus = moderation.result === 'BLOCKED' ? 'BLOCKED'
+      : moderation.result === 'WARNING' ? 'HIDDEN'
+      : 'ACTIVE'
 
     const post = await prisma.post.create({
       data: {
-        content,
-        status: "ACTIVE",
+        content: content || '',
+        imageUrl,
+        status: postStatus as any,
+        sentiment: moderation.sentiment as any,
         authorId: userId,
         category: category as any,
       },
       include: {
-        author: {
-          select: { id: true, name: true, email: true, avatar: true }
-        },
-        _count: {
-          select: { likes: true, comments: true }
-        }
+        author: { select: { id: true, name: true, email: true, avatar: true } },
+        _count: { select: { likes: true, comments: true } }
       }
     })
 
-    return NextResponse.json({ data: post }, { status: 201 })
+    // Create moderation log + notification for non-safe content
+    if (moderation.result !== 'SAFE') {
+      const adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
+      const notifMessage = moderation.result === 'BLOCKED'
+        ? `Bài viết của bạn đã bị chặn: ${moderation.reason}`
+        : `Bài viết của bạn đang chờ xét duyệt: ${moderation.reason}`
+
+      await Promise.all([
+        adminUser ? prisma.moderationLog.create({
+          data: {
+            postId: post.id,
+            moderatorId: adminUser.id,
+            authorId: userId,
+            content,
+            result: moderation.result as any,
+            reason: moderation.reason,
+          }
+        }).catch(() => {}) : Promise.resolve(),
+        prisma.notification.create({
+          data: {
+            type: 'WARNING',
+            message: notifMessage,
+            userId,
+            postId: post.id,
+          }
+        }).catch(() => {}),
+      ])
+    }
+
+    if (moderation.result === 'BLOCKED') {
+      return NextResponse.json({
+        error: 'Bài viết vi phạm tiêu chuẩn cộng đồng và không thể đăng.',
+        reason: moderation.reason,
+        blocked: true,
+      }, { status: 422 })
+    }
+
+    return NextResponse.json({
+      data: post,
+      ...(moderation.result === 'WARNING' && { warning: moderation.reason })
+    }, { status: 201 })
 
   } catch (error) {
     console.error("POST /api/posts error:", error)
@@ -109,15 +116,10 @@ export async function GET(req: NextRequest) {
       take: take + 1,
       ...(cursor && { cursor: { id: cursor }, skip: 1 }),
       include: {
-        author: {
-          select: { id: true, name: true, email: true, avatar: true }
-        },
-        ...(userId && {
-          likes: { where: { userId }, select: { userId: true } }
-        }),
-        _count: {
-          select: { likes: true, comments: true }
-        }
+        author: { select: { id: true, name: true, email: true, avatar: true } },
+        repost: { include: { author: { select: { id: true, name: true, email: true, avatar: true } } } },
+        ...(userId && { likes: { where: { userId }, select: { userId: true } } }),
+        _count: { select: { likes: true, comments: true, reposts: true } }
       }
     })
 

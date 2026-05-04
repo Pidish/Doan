@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { PostCard } from '@/src/components/PostCard'
 import { RightSidebar } from '@/src/components/RightSidebar'
-import { motion } from 'framer-motion'
-import { Loader2, PenSquare } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Loader2, PenSquare, Sparkles, TrendingUp, ImagePlus, X } from 'lucide-react'
 
 interface Post {
   id: string
@@ -31,18 +31,20 @@ export default function HomePage() {
   const [error, setError] = useState('')
   const [newPost, setNewPost] = useState('')
   const [posting, setPosting] = useState(false)
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar?: string } | null>(null)
-  const [activeTab, setActiveTab] = useState<'FOR_YOU' | 'FOLLOWING' | 'SONG_XANH' | 'TAM_LY_HOC'>('FOR_YOU')
+  const [activeTab, setActiveTab] = useState<'FOR_YOU' | 'FOLLOWING' | 'SONG_XANH' | 'TAM_LY_HOC' | 'TINH_LANG' | 'SANG_TAO' | 'AI_RECOMMENDED'>('FOR_YOU')
+  const [aiProfile, setAiProfile] = useState<{
+    topCategories: { key: string; label: string; score: number }[]
+    totalLikes: number
+    description: string
+  } | null>(null)
 
-  // ✅ Lấy token từ localStorage sau khi mount
-  useEffect(() => {
-    const t = localStorage.getItem('accessToken')
-    setToken(t)
-  }, [])
-
-  // ✅ Fetch posts theo tab
   const fetchPosts = useCallback(async (
     cursor?: string,
     tkn?: string | null,
@@ -56,16 +58,18 @@ export default function HomePage() {
       let url: string
       if (currentTab === 'FOLLOWING') {
         url = `/api/posts/feed?userId=${userId ?? currentUser?.id ?? ''}`
-      } else if (currentTab === 'SONG_XANH') {
-        url = cursor ? `/api/posts?category=SONG_XANH&cursor=${cursor}` : '/api/posts?category=SONG_XANH'
-      } else if (currentTab === 'TAM_LY_HOC') {
-        url = cursor ? `/api/posts?category=TAM_LY_HOC&cursor=${cursor}` : '/api/posts?category=TAM_LY_HOC'
+      } else if (currentTab === 'SONG_XANH' || currentTab === 'TAM_LY_HOC' || currentTab === 'TINH_LANG' || currentTab === 'SANG_TAO') {
+        url = cursor ? `/api/posts?category=${currentTab}&cursor=${cursor}` : `/api/posts?category=${currentTab}`
+      } else if (currentTab === 'AI_RECOMMENDED') {
+        url = '/api/posts/recommended'
       } else {
         url = cursor ? `/api/posts?cursor=${cursor}` : '/api/posts'
       }
-
       const res = await fetch(url, { headers: { Authorization: `Bearer ${t}` } })
       const data = await res.json()
+      if (currentTab === 'AI_RECOMMENDED' && data.profile) {
+        setAiProfile(data.profile)
+      }
       if (cursor) {
         setPosts(prev => [...prev, ...(data.data || [])])
       } else {
@@ -79,21 +83,27 @@ export default function HomePage() {
     }
   }, [token, activeTab, currentUser?.id])
 
+  // Single mount effect — one token read, one /api/me call
   useEffect(() => {
     const t = localStorage.getItem('accessToken')
+    if (!t) return
     setToken(t)
-    if (t) {
-      fetch('/api/me', { headers: { Authorization: `Bearer ${t}` } })
-        .then(r => r.json())
-        .then(d => {
-          setCurrentUser(d.data)
-          fetchPosts(undefined, t, 'FOR_YOU', d.data?.id)
-        })
-        .catch(() => fetchPosts(undefined, t, 'FOR_YOU'))
-    }
+
+    const validTabs = ['FOR_YOU', 'FOLLOWING', 'SONG_XANH', 'TAM_LY_HOC', 'TINH_LANG', 'SANG_TAO', 'AI_RECOMMENDED']
+    const urlTab = new URLSearchParams(window.location.search).get('tab')
+    const initialTab = (urlTab && validTabs.includes(urlTab) ? urlTab : 'FOR_YOU') as typeof activeTab
+    if (initialTab !== 'FOR_YOU') setActiveTab(initialTab)
+
+    fetch('/api/me', { headers: { Authorization: `Bearer ${t}` } })
+      .then(r => r.json())
+      .then(d => {
+        setCurrentUser(d.data)
+        fetchPosts(undefined, t, initialTab, d.data?.id)
+      })
+      .catch(() => fetchPosts(undefined, t, initialTab))
   }, [])
 
-  // Reload khi đổi tab
+  // Reload when tab changes
   useEffect(() => {
     if (token && currentUser) {
       setPosts([])
@@ -101,39 +111,77 @@ export default function HomePage() {
     }
   }, [activeTab])
 
-  // ✅ Tạo post với token từ state
-  const handleCreatePost = async () => {
-  if (!newPost.trim()) return
-  setPosting(true)
-  setError('')
-
-  // ✅ Lấy thẳng từ localStorage, không dùng state
-  const t = localStorage.getItem('accessToken')
-
-  try {
-    const res = await fetch('/api/posts', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${t}`
-      },
-      body: JSON.stringify({ content: newPost })
-    })
-
-    const data = await res.json()
-
-    if (res.ok) {
-      setPosts(prev => [data.data, ...prev])
-      setNewPost('')
-    } else {
-      setError(data.error || 'Không thể đăng bài')
+  // Listen for tab-change events from RightSidebar trending clicks
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const newTab = (e as CustomEvent<string>).detail as typeof activeTab
+      const t = localStorage.getItem('accessToken')
+      setActiveTab(newTab)
+      setPosts([])
+      fetchPosts(undefined, t, newTab, currentUser?.id)
     }
-  } catch {
-    setError('Không thể kết nối server')
-  } finally {
-    setPosting(false)
+    window.addEventListener('nexora:set-tab', handler)
+    return () => window.removeEventListener('nexora:set-tab', handler)
+  }, [currentUser?.id])
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 5 * 1024 * 1024) { setError('Ảnh không được vượt quá 5MB'); return }
+    setImageFile(file)
+    setImagePreview(URL.createObjectURL(file))
+    setError('')
   }
-}
+
+  const removeImage = () => {
+    setImageFile(null)
+    setImagePreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleCreatePost = async () => {
+    if (!newPost.trim() && !imageFile) return
+    setPosting(true)
+    setError('')
+    const t = localStorage.getItem('accessToken')
+
+    try {
+      let imageUrl: string | undefined
+      if (imageFile) {
+        setUploading(true)
+        const fd = new FormData()
+        fd.append('file', imageFile)
+        const upRes = await fetch('/api/upload', { method: 'POST', headers: { Authorization: `Bearer ${t}` }, body: fd })
+        const upData = await upRes.json()
+        setUploading(false)
+        if (!upRes.ok) { setError(upData.error || 'Upload ảnh thất bại'); setPosting(false); return }
+        imageUrl = upData.url
+      }
+
+      const res = await fetch('/api/posts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` },
+        body: JSON.stringify({ content: newPost, imageUrl }),
+      })
+      const data = await res.json()
+
+      if (res.ok) {
+        setPosts(prev => [data.data, ...prev])
+        setNewPost('')
+        removeImage()
+        if (data.warning) setError(`⚠️ Bài đã đăng nhưng cần xem xét: ${data.warning}`)
+      } else if (res.status === 422 && data.blocked) {
+        setError(`🚫 ${data.error} — ${data.reason}`)
+      } else {
+        setError(data.error || 'Không thể đăng bài')
+      }
+    } catch {
+      setError('Không thể kết nối server')
+    } finally {
+      setPosting(false)
+      setUploading(false)
+    }
+  }
 
   return (
     <div className="flex">
@@ -141,61 +189,100 @@ export default function HomePage() {
 
         {/* Banner */}
         <motion.section
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative mb-10 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-200 p-10 flex items-center min-h-[280px]"
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="relative mb-8 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-600 via-teal-500 to-emerald-700 p-8 md:p-10 flex items-center min-h-[200px] md:min-h-[240px] shadow-lg"
         >
-          <div className="relative z-10 max-w-lg">
-            <h2 className="text-4xl font-extrabold text-emerald-900 leading-tight mb-4">
-              Chào buổi sáng, <br />Người bạn tinh thần
+          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 0% 100%, white 0%, transparent 60%), radial-gradient(circle at 100% 0%, white 0%, transparent 50%)' }} />
+          <div className="relative z-10 max-w-md">
+            <p className="text-emerald-200/80 text-xs font-semibold uppercase tracking-widest mb-2">Nexora · Digital Sanctuary</p>
+            <h2 className="text-3xl md:text-4xl font-extrabold text-white leading-tight mb-3">
+              Chào buổi sáng, <br />
+              <span className="text-emerald-200">{currentUser?.name?.split(' ').pop() ?? 'bạn'}</span>
             </h2>
-            <p className="text-emerald-800/80 text-lg leading-relaxed">
-              Hôm nay hãy cùng dành một chút thời gian để hít thở và kết nối với cộng đồng yên bình của chúng ta.
+            <p className="text-white/70 text-sm leading-relaxed">
+              Hãy dành một chút thời gian hít thở và kết nối với cộng đồng yên bình của chúng ta.
             </p>
           </div>
-          <div className="absolute -right-10 -bottom-10 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+          <div className="absolute -right-16 -bottom-16 w-72 h-72 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute right-10 top-8 w-32 h-32 bg-white/5 rounded-full blur-xl pointer-events-none hidden md:block" />
           <img
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuCO5bVeWn0qQLFQRgnV8vWrjaHqPpFJcVxYNyTCwJQwXpvJMJ4558NhbZr2V0vWDc3IKvw6gTTi_KmWCiMJoL7SQqoGTI5tn5wizM2Y8DyrykGM2ZszM24jmu5tCeK9r9JSvgvIYS808fminLcqhX89PFjkR0AAxNnZrUD7fEE7RVdxg57_L5HFPbA_dfWnCJ_GItZTe68olXPpTnMCsoyl9XnwcYOQunqfNN_oxjS4WXG-Kr0i8eq8OLUjWqDte_TjC3AmDECEPsGN"
             alt="Nature"
-            className="absolute right-0 top-0 h-full w-1/2 object-cover opacity-60 mix-blend-overlay hidden md:block"
+            className="absolute right-0 top-0 h-full w-2/5 object-cover opacity-20 mix-blend-luminosity hidden md:block"
           />
         </motion.section>
 
         {/* Tạo post mới */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-8">
-          <div className="flex gap-4">
-            <Link href="/profile" className="flex-shrink-0">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
+          <div className="p-5 flex gap-3">
+            <Link href="/profile" className="flex-shrink-0 mt-0.5">
               <img
                 src={currentUser?.avatar || `https://i.pravatar.cc/40?u=${currentUser?.id ?? 'me'}`}
                 alt={currentUser?.name || 'avatar'}
-                className="w-10 h-10 rounded-full object-cover hover:ring-2 hover:ring-emerald-500 transition-all cursor-pointer"
+                className="w-9 h-9 rounded-full object-cover ring-2 ring-white hover:ring-emerald-300 transition-all cursor-pointer shadow-sm"
               />
             </Link>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <textarea
                 value={newPost}
                 onChange={e => setNewPost(e.target.value)}
                 placeholder="Bạn đang nghĩ gì vậy?"
-                className="w-full bg-gray-50 rounded-2xl p-4 text-gray-900 placeholder:text-gray-400 resize-none outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                className="w-full bg-gray-50 rounded-xl p-3.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none outline-none focus:bg-white focus:ring-2 focus:ring-emerald-200 border border-transparent focus:border-emerald-200 transition-all"
                 rows={3}
               />
-              {error && (
-                <p className="text-red-500 text-sm mt-2">{error}</p>
+
+              {/* Image preview */}
+              {imagePreview && (
+                <div className="relative mt-2 rounded-xl overflow-hidden border border-gray-100">
+                  <img src={imagePreview} alt="preview" className="w-full max-h-64 object-cover" />
+                  <button
+                    onClick={removeImage}
+                    className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
-              <div className="flex justify-end mt-3">
-                <button
-                  onClick={handleCreatePost}
-                  disabled={posting || !newPost.trim()}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-emerald-700 text-white rounded-full font-bold text-sm hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {posting ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <><PenSquare className="w-4 h-4" /> Đăng bài</>
-                  )}
-                </button>
-              </div>
+
+              {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
             </div>
+          </div>
+
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            className="hidden"
+            onChange={handleImageChange}
+          />
+
+          <div className="px-5 pb-4 flex items-center justify-between border-t border-gray-50 pt-3">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1.5 text-gray-400 hover:text-emerald-600 transition-colors text-xs font-medium"
+              >
+                <ImagePlus className="w-4 h-4" />
+                <span>Thêm ảnh</span>
+              </button>
+              <p className="text-xs text-gray-300">{newPost.length > 0 ? `${newPost.length}/500` : ''}</p>
+            </div>
+            <button
+              onClick={handleCreatePost}
+              disabled={posting || uploading || (!newPost.trim() && !imageFile)}
+              className="flex items-center gap-2 px-5 py-2 bg-emerald-700 text-white rounded-full font-semibold text-sm hover:bg-emerald-800 hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+            >
+              {uploading ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang tải ảnh...</>
+              ) : posting ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang đăng...</>
+              ) : (
+                <><PenSquare className="w-3.5 h-3.5" /> Đăng bài</>
+              )}
+            </button>
           </div>
         </div>
 
@@ -204,27 +291,65 @@ export default function HomePage() {
           const tabs = [
             { key: 'FOR_YOU', label: 'Dành cho bạn' },
             { key: 'FOLLOWING', label: 'Đang theo dõi' },
+            { key: 'AI_RECOMMENDED', label: '✨ AI Gợi ý' },
+            { key: 'TINH_LANG', label: 'Tĩnh lặng' },
             { key: 'SONG_XANH', label: 'Thiên nhiên' },
+            { key: 'SANG_TAO', label: 'Sáng tạo' },
             { key: 'TAM_LY_HOC', label: 'Tâm hồn' },
           ] as const
           return (
-            <div className="flex gap-8 mb-8 overflow-x-auto pb-2 border-b border-gray-100">
-              {tabs.map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
-                  className={`pb-3 font-medium transition-colors relative whitespace-nowrap ${
-                    activeTab === tab.key
-                      ? 'text-emerald-700 font-bold after:content-[\'\'] after:absolute after:-bottom-[1px] after:left-0 after:w-full after:h-0.5 after:bg-emerald-700 after:rounded-full'
-                      : 'text-gray-400 hover:text-emerald-700'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm mb-6 px-2">
+              <div className="flex gap-1 overflow-x-auto">
+                {tabs.map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={`px-4 py-3.5 text-sm font-medium transition-all whitespace-nowrap relative flex-shrink-0 ${
+                      activeTab === tab.key
+                        ? 'text-emerald-700 font-semibold after:content-[\'\'] after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:bg-emerald-600 after:rounded-full'
+                        : 'text-gray-400 hover:text-gray-700'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )
         })()}
+
+        {/* AI Profile Banner */}
+        <AnimatePresence>
+          {activeTab === 'AI_RECOMMENDED' && aiProfile && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mb-6 bg-gradient-to-br from-violet-50 to-indigo-50 border border-violet-200 rounded-2xl p-5"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-violet-900 text-sm mb-1">Hồ sơ sở thích của bạn</p>
+                  <p className="text-violet-700 text-sm leading-relaxed mb-3">{aiProfile.description}</p>
+                  {aiProfile.topCategories.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {aiProfile.topCategories.map(cat => (
+                        <span key={cat.key} className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-violet-200 rounded-full text-xs font-semibold text-violet-700">
+                          <TrendingUp className="w-3 h-3" />
+                          {cat.label}
+                          <span className="text-violet-400 font-normal">{cat.score}%</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Posts */}
         {loading ? (
@@ -233,12 +358,22 @@ export default function HomePage() {
           </div>
         ) : posts.length === 0 ? (
           <div className="text-center py-20 text-gray-400">
-            <p className="text-lg font-medium">
-              {activeTab === 'FOLLOWING' ? 'Chưa có bài viết từ người bạn theo dõi' : 'Chưa có bài viết nào'}
-            </p>
-            <p className="text-sm mt-2">
-              {activeTab === 'FOLLOWING' ? 'Hãy theo dõi thêm người dùng để xem bài viết của họ!' : 'Hãy là người đầu tiên chia sẻ!'}
-            </p>
+            {activeTab === 'AI_RECOMMENDED' ? (
+              <>
+                <Sparkles className="w-12 h-12 mx-auto mb-4 text-violet-300" />
+                <p className="text-lg font-medium text-gray-600">AI đang học sở thích của bạn</p>
+                <p className="text-sm mt-2">Hãy like và bình luận thêm để nhận gợi ý phù hợp hơn!</p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-medium">
+                  {activeTab === 'FOLLOWING' ? 'Chưa có bài viết từ người bạn theo dõi' : 'Chưa có bài viết nào'}
+                </p>
+                <p className="text-sm mt-2">
+                  {activeTab === 'FOLLOWING' ? 'Hãy theo dõi thêm người dùng để xem bài viết của họ!' : 'Hãy là người đầu tiên chia sẻ!'}
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-6">
@@ -252,7 +387,9 @@ export default function HomePage() {
                   timestamp: new Date(post.createdAt).toLocaleDateString('vi-VN'),
                   likes: post._count.likes,
                   comments: post._count.comments,
+                  reposts: (post._count as any).reposts ?? 0,
                   isLiked: post.isLiked,
+                  repost: (post as any).repost ?? null,
                   author: {
                     id: post.author.id,
                     name: post.author.name,

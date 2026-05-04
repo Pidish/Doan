@@ -5,10 +5,7 @@ import { verifyAccessToken } from "@/lib/auth"
 export async function GET(req: NextRequest) {
   try {
     const result = verifyAccessToken(req)
-
-    if (!result.success) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    if (!result.success) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const user = await prisma.user.findUnique({
       where: { id: result.payload.id },
@@ -21,39 +18,29 @@ export async function GET(req: NextRequest) {
         role: true,
         isActive: true,
         createdAt: true,
-        _count: {
-          select: {
-            posts: true,
-            followers: true,
-            following: true,
-          }
-        }
+        isPrivate: true,
+        showOnlineStatus: true,
+        allowMessages: true,
+        allowSearch: true,
+        _count: { select: { posts: true, followers: true, following: true } }
       }
     })
 
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
+    if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 })
     return NextResponse.json({ data: user })
-
   } catch (error) {
     console.error("GET /api/me error:", error)
     return NextResponse.json({ error: "Server error" }, { status: 500 })
   }
 }
 
-// PATCH /api/me
-// Cập nhật profile
 export async function PATCH(req: NextRequest) {
   try {
     const result = verifyAccessToken(req)
+    if (!result.success) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!result.success) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const { name, bio, avatar } = await req.json()
+    const body = await req.json()
+    const { name, bio, avatar, isPrivate, showOnlineStatus, allowMessages, allowSearch } = body
 
     const user = await prisma.user.update({
       where: { id: result.payload.id },
@@ -61,6 +48,10 @@ export async function PATCH(req: NextRequest) {
         ...(name !== undefined && { name }),
         ...(bio !== undefined && { bio: bio || null }),
         ...(avatar !== undefined && { avatar: avatar || null }),
+        ...(isPrivate !== undefined && { isPrivate }),
+        ...(showOnlineStatus !== undefined && { showOnlineStatus }),
+        ...(allowMessages !== undefined && { allowMessages }),
+        ...(allowSearch !== undefined && { allowSearch }),
       },
       select: {
         id: true,
@@ -70,11 +61,14 @@ export async function PATCH(req: NextRequest) {
         bio: true,
         role: true,
         updatedAt: true,
+        isPrivate: true,
+        showOnlineStatus: true,
+        allowMessages: true,
+        allowSearch: true,
       }
     })
 
     return NextResponse.json({ data: user })
-
   } catch (error) {
     console.error("PATCH /api/me error:", error)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

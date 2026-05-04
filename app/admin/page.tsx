@@ -11,6 +11,7 @@ import {
     ResponsiveContainer, LineChart, Line,
     AreaChart, Area, CartesianGrid
 } from 'recharts'
+import { fetchWithAuth } from '@/lib/fetchWithAuth'
 
 interface Stats {
     totalUsers: number
@@ -40,18 +41,11 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         const fetchAll = async () => {
-            const token = localStorage.getItem('accessToken')
             try {
                 const [statsRes, usersRes, postsRes] = await Promise.all([
-                    fetch('/api/admin/stats', {
-                        headers: { Authorization: `Bearer ${token}` }
-                    }),
-                    fetch('/api/admin/users?limit=5', {
-                        headers: { Authorization: `Bearer ${token}` }
-                    }),
-                    fetch('/api/admin/posts?limit=5', {
-                        headers: { Authorization: `Bearer ${token}` }
-                    }),
+                    fetchWithAuth('/api/admin/stats'),
+                    fetchWithAuth('/api/admin/users?limit=5'),
+                    fetchWithAuth('/api/admin/posts?limit=5'),
                 ])
 
                 const [statsData, usersData, postsData] = await Promise.all([
