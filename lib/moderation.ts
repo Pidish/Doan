@@ -42,6 +42,8 @@ export async function moderateContent(content: string): Promise<ModerationResult
   if (!process.env.GROQ_API_KEY || process.env.GROQ_API_KEY === 'your_groq_api_key_here') {
     return { result: 'SAFE', reason: 'AI chưa được cấu hình', sentiment: 'NEUTRAL', category: 'DANH_CHO_BAN' }
   }
+  console.log('GROQ KEY EXISTS:', !!process.env.GROQ_API_KEY)
+console.log('GROQ KEY START:', process.env.GROQ_API_KEY?.slice(0, 4))
   try {
     const completion = await getClient().chat.completions.create({
       model: 'llama-3.1-8b-instant',
@@ -62,8 +64,8 @@ export async function moderateContent(content: string): Promise<ModerationResult
     if (!parsed.reason) parsed.reason = 'Kiểm duyệt tự động'
 
     return parsed
-  } catch (err: any) {
-    const msg = err?.message || ''
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : ''
     if (msg.includes('401') || msg.includes('invalid_api_key')) {
       console.warn('Moderation skipped: Invalid Groq API key')
       return { result: 'SAFE', reason: 'API key không hợp lệ', sentiment: 'NEUTRAL', category: 'DANH_CHO_BAN' }

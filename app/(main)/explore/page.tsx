@@ -120,7 +120,7 @@ export default function ExplorePage() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center py-20">
+          <div suppressHydrationWarning className="flex justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
           </div>
         ) : filtered.length === 0 ? (

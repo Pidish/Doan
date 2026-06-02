@@ -197,30 +197,27 @@ export function PostCard({ post }: PostCardProps) {
         {post.repost && (
           <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium mb-3 -mt-1">
             <Repeat2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span><span className="font-semibold text-emerald-600">{post.author.name}</span> đã chia sẻ bài viết</span>
+            <span className="text-emerald-600 font-semibold">Đã chia sẻ bài viết</span>
           </div>
         )}
 
-        {/* Author row */}
+        {/* Author row — always shows the post owner (reposter for reposts) */}
         <div className="flex gap-3 mb-4">
-          <Link href={`/profile/${post.repost ? post.repost.author.id : post.author.id}`} className="shrink-0 mt-0.5">
+          <Link href={`/profile/${post.author.id}`} className="shrink-0 mt-0.5">
             <img
-              src={(post.repost ? post.repost.author.avatar : post.author.avatar) || `https://i.pravatar.cc/48?u=${post.repost ? post.repost.author.id : post.author.id}`}
-              alt={post.repost ? post.repost.author.name : post.author.name}
+              src={post.author.avatar || `https://i.pravatar.cc/48?u=${post.author.id}`}
+              alt={post.author.name}
               className="w-10 h-10 rounded-full object-cover ring-2 ring-white hover:ring-emerald-300 transition-all"
             />
           </Link>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <Link href={`/profile/${post.repost ? post.repost.author.id : post.author.id}`} className="font-bold text-gray-900 hover:text-emerald-700 transition-colors text-sm leading-tight block truncate">
-                  {post.repost ? post.repost.author.name : post.author.name}
+                <Link href={`/profile/${post.author.id}`} className="font-bold text-gray-900 hover:text-emerald-700 transition-colors text-sm leading-tight block truncate">
+                  {post.author.name}
                 </Link>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {post.repost
-                    ? `@${post.repost.author.email.split('@')[0]} · ${timeAgo(post.repost.createdAt)} trước`
-                    : `${post.author.handle} · ${typeof post.timestamp === 'string' && post.timestamp.includes('trước') ? post.timestamp : timeAgo(post.timestamp) + ' trước'}`
-                  }
+                  {`${post.author.handle} · ${typeof post.timestamp === 'string' && post.timestamp.includes('trước') ? post.timestamp : timeAgo(post.timestamp) + ' trước'}`}
                 </p>
               </div>
               <button className="text-gray-300 hover:text-gray-500 transition-colors p-1 rounded-full hover:bg-gray-100 flex-shrink-0 -mt-0.5">
@@ -232,17 +229,28 @@ export function PostCard({ post }: PostCardProps) {
 
         {/* Caption (when repost has caption) */}
         {post.repost && post.content && (
-          <p className="text-gray-500 text-sm italic mb-3">"{post.content}"</p>
+          <p className="text-gray-600 text-sm mb-3">{post.content}</p>
         )}
 
-        {/* Content — show repost's content or normal content */}
+        {/* Normal post content */}
         {!post.repost && (
           <p className="text-gray-800 text-sm leading-relaxed mb-4">{post.content}</p>
         )}
 
-        {/* Embedded original post (repost) */}
+        {/* Embedded original post — shows original author + content */}
         {post.repost && (
-          <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50/60">
+          <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50/60 hover:bg-gray-100/60 transition-colors cursor-pointer" onClick={() => window.location.href = `/posts/${post.repost!.id}`}>
+            <div className="flex items-center gap-2 mb-2.5">
+              <img
+                src={post.repost.author.avatar || `https://i.pravatar.cc/32?u=${post.repost.author.id}`}
+                alt={post.repost.author.name}
+                className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+              />
+              <span className="font-bold text-xs text-gray-900">{post.repost.author.name}</span>
+              <span className="text-xs text-gray-400">@{post.repost.author.email.split('@')[0]}</span>
+              <span className="text-gray-300 text-xs">·</span>
+              <span className="text-xs text-gray-400">{timeAgo(post.repost.createdAt)} trước</span>
+            </div>
             <p className="text-gray-800 text-sm leading-relaxed">{post.repost.content}</p>
           </div>
         )}

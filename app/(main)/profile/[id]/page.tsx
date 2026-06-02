@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { PostCard } from '@/src/components/PostCard'
-import { MapPin, Calendar, Loader2, X, UserCheck, Heart, UserPlus, UserMinus } from 'lucide-react'
+import { MapPin, Calendar, Loader2, X, UserCheck, Heart, UserPlus, UserMinus, Lock, Eye } from 'lucide-react'
 
 interface UserProfile {
   id: string
@@ -42,7 +42,6 @@ export default function UserProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [isFollowing, setIsFollowing] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
   const [followerCount, setFollowerCount] = useState(0)
@@ -50,6 +49,9 @@ export default function UserProfilePage() {
   const [modal, setModal] = useState<ModalType>(null)
   const [modalUsers, setModalUsers] = useState<PersonUser[]>([])
   const [modalLoading, setModalLoading] = useState(false)
+  const [postsLocked, setPostsLocked] = useState(false)
+  const [totalPostCount, setTotalPostCount] = useState(0)
+  const [previewPosts, setPreviewPosts] = useState<Post[]>([])
 
   useEffect(() => {
     if (!id) return
@@ -68,7 +70,6 @@ export default function UserProfilePage() {
         ])
 
         const me = meData.data
-        setCurrentUserId(me?.id ?? null)
 
         if (userData.id) {
           // redirect own profile
@@ -76,7 +77,7 @@ export default function UserProfilePage() {
           setUser({ ...userData, role: userData.role ?? 'USER' })
           setFollowerCount(userData._count?.followers ?? 0)
 
-          // check if following
+          // check if following — now determined by postsData.locked
           const followRes = await fetch(`/api/follow/${userData.id}/followers`, {
             headers: { Authorization: `Bearer ${token}` }
           })
@@ -85,11 +86,25 @@ export default function UserProfilePage() {
           setIsFollowing(followers.some(f => f.id === me?.id))
         }
 
-        const rawPosts: Post[] = Array.isArray(postsData) ? postsData : (postsData.data || [])
-        setPosts(rawPosts.map(p => ({
-          ...p,
-          author: p.author ?? { id: userData.id, name: userData.name, email: userData.email, avatar: userData.avatar }
-        })))
+        // Handle locked vs unlocked posts
+        if (postsData.locked) {
+          setPostsLocked(true)
+          setTotalPostCount(postsData.totalCount ?? 0)
+          const rawPreview: Post[] = postsData.preview || []
+          setPreviewPosts(rawPreview.map((p: Post) => ({
+            ...p,
+            author: p.author ?? { id: userData.id, name: userData.name, email: userData.email, avatar: userData.avatar }
+          })))
+          setPosts([])
+        } else {
+          setPostsLocked(false)
+          setPreviewPosts([])
+          const rawPosts: Post[] = Array.isArray(postsData) ? postsData : (postsData.data || [])
+          setPosts(rawPosts.map((p: Post) => ({
+            ...p,
+            author: p.author ?? { id: userData.id, name: userData.name, email: userData.email, avatar: userData.avatar }
+          })))
+        }
       } catch (err) {
         console.error(err)
       } finally {
@@ -111,8 +126,37 @@ export default function UserProfilePage() {
       })
       const data = await res.json()
       if (res.ok) {
-        setIsFollowing(data.following)
-        setFollowerCount(prev => data.following ? prev + 1 : prev - 1)
+        const nowFollowing: boolean = data.following
+        setIsFollowing(nowFollowing)
+        setFollowerCount(prev => nowFollowing ? prev + 1 : prev - 1)
+
+        // Nếu vừa follow -> mở khoá bài viết bằng cách re-fetch
+        if (nowFollowing && postsLocked) {
+          const postsRes = await fetch(`/api/users/${user.id}/posts`, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          const postsData = await postsRes.json()
+          if (!postsData.locked) {
+            setPostsLocked(false)
+            setPreviewPosts([])
+            const rawPosts: Post[] = postsData.data || []
+            setPosts(rawPosts.map((p: Post) => ({
+              ...p,
+              author: p.author ?? { id: user.id, name: user.name, email: user.email, avatar: user.avatar }
+            })))
+          }
+        }
+
+        // Nếu vừa unfollow -> khoá lại
+        if (!nowFollowing) {
+          setPostsLocked(true)
+          setTotalPostCount(posts.length)
+          setPreviewPosts(posts.slice(0, 1).map(p => ({
+            ...p,
+            content: p.content.slice(0, 80) + (p.content.length > 80 ? '…' : ''),
+          })))
+          setPosts([])
+        }
       }
     } finally {
       setFollowLoading(false)
@@ -262,7 +306,80 @@ export default function UserProfilePage() {
 
         <div className="mt-6">
           <div className="flex flex-col gap-4">
-            {posts.length === 0 ? (
+            {postsLocked ? (
+              // UI khóa bài viết khi chưa follow
+              <div className="relative">
+                {/* Preview bài đầu tiên (bị mờ) */}
+                {previewPosts.length > 0 && (
+                  <div className="relative overflow-hidden rounded-2xl">
+                    <div className="pointer-events-none select-none blur-[2px] opacity-60">
+                      <PostCard
+                        post={{
+                          id: previewPosts[0].id,
+                          content: previewPosts[0].content,
+                          image: undefined,
+                          timestamp: new Date(previewPosts[0].createdAt).toLocaleDateString('vi-VN'),
+                          likes: previewPosts[0]._count.likes,
+                          comments: previewPosts[0]._count.comments,
+                          isLiked: false,
+                          author: {
+                            id: previewPosts[0].author.id,
+                            name: previewPosts[0].author.name,
+                            handle: `@${previewPosts[0].author.email?.split('@')[0] ?? ''}`,
+                            avatar: previewPosts[0].author.avatar || `https://i.pravatar.cc/100?u=${previewPosts[0].author.id}`,
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Overlay khóa */}
+                <div className={`${
+                  previewPosts.length > 0 ? 'mt-0' : 'mt-4'
+                } bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden`}>
+                  <div className="flex flex-col items-center gap-5 py-12 px-6 text-center relative">
+                    {/* Gradient fade ở trên khi có preview */}
+                    {previewPosts.length > 0 && (
+                      <div className="absolute -top-16 left-0 right-0 h-20 bg-gradient-to-b from-transparent to-white pointer-events-none" />
+                    )}
+
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-100 flex items-center justify-center shadow-sm">
+                      <Lock className="w-7 h-7 text-emerald-600" />
+                    </div>
+
+                    <div>
+                      <p className="text-lg font-bold text-gray-800 mb-1">
+                        {totalPostCount > 0
+                          ? `${totalPostCount} bài viết đang ở chế độ riêng tư`
+                          : 'Bài viết riêng tư'}
+                      </p>
+                      <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
+                        Theo dõi <span className="font-semibold text-gray-600">{user?.name}</span> để xem toàn bộ bài viết của họ.
+                      </p>
+                    </div>
+
+                    {totalPostCount > 1 && (
+                      <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-full px-4 py-2">
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Còn {totalPostCount - 1} bài viết đang chờ bạn…</span>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleFollow}
+                      disabled={followLoading}
+                      className="flex items-center gap-2 px-8 py-3 bg-emerald-600 text-white rounded-full font-bold text-sm hover:bg-emerald-700 hover:-translate-y-0.5 transition-all shadow-sm disabled:opacity-60"
+                    >
+                      {followLoading
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <UserPlus className="w-4 h-4" />}
+                      Theo dõi để xem bài viết
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : posts.length === 0 ? (
               <div className="text-center py-20 text-gray-400 bg-white rounded-2xl">
                 <p className="font-medium">Chưa có bài viết nào</p>
               </div>

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { PostCard } from '@/src/components/PostCard'
-import { MapPin, Link as LinkIcon, Calendar, Loader2, Share2, X, UserCheck, Heart } from 'lucide-react'
+import { MapPin, Link as LinkIcon, Calendar, Loader2, Share2, X, UserCheck, Heart, Link2, Check, ExternalLink } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface UserProfile {
   id: string
@@ -45,6 +46,37 @@ export default function ProfilePage() {
   const [modal, setModal] = useState<ModalType>(null)
   const [modalUsers, setModalUsers] = useState<PersonUser[]>([])
   const [modalLoading, setModalLoading] = useState(false)
+
+  // Share state
+  const [showShare, setShowShare] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle')
+  const shareRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showShare) return
+    const handler = (e: MouseEvent) => {
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
+        setShowShare(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showShare])
+
+  const profileUrl = typeof window !== 'undefined' && user
+    ? `${window.location.origin}/profile/${user.id}`
+    : ''
+
+  const copyLink = async () => {
+    await navigator.clipboard.writeText(profileUrl)
+    setCopyState('copied')
+    setTimeout(() => { setCopyState('idle'); setShowShare(false) }, 1500)
+  }
+
+  const nativeShare = async () => {
+    await navigator.share({ title: `${user?.name} trên Nexora`, url: profileUrl })
+    setShowShare(false)
+  }
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -168,9 +200,52 @@ export default function ProfilePage() {
                 <Link href="/profile/edit" className="px-5 py-2 rounded-full bg-white text-gray-700 font-semibold text-sm border border-gray-200 hover:shadow-md transition-all">
                   Chỉnh sửa hồ sơ
                 </Link>
-                <button className="px-5 py-2 rounded-full bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-all flex items-center gap-2">
-                  <Share2 className="w-4 h-4" /> Chia sẻ
-                </button>
+                <div ref={shareRef} className="relative">
+                  <button
+                    onClick={() => setShowShare(v => !v)}
+                    className="px-5 py-2 rounded-full bg-emerald-600 text-white font-semibold text-sm hover:bg-emerald-700 transition-all flex items-center gap-2"
+                  >
+                    <Share2 className="w-4 h-4" /> Chia sẻ
+                  </button>
+
+                  <AnimatePresence>
+                    {showShare && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.92, y: 6 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.92, y: 6 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-30"
+                      >
+                        <div className="px-4 py-2.5 border-b border-gray-50">
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Chia sẻ hồ sơ</p>
+                        </div>
+
+                        <button
+                          onClick={copyLink}
+                          className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          {copyState === 'copied'
+                            ? <Check className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                            : <Link2 className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                          <span className={copyState === 'copied' ? 'text-emerald-600 font-semibold' : ''}>
+                            {copyState === 'copied' ? 'Đã sao chép!' : 'Sao chép liên kết'}
+                          </span>
+                        </button>
+
+                        {typeof navigator !== 'undefined' && 'share' in navigator && (
+                          <button
+                            onClick={nativeShare}
+                            className="flex items-center gap-3 w-full px-4 py-3 text-sm text-gray-700 hover:bg-gray-50 transition-colors border-t border-gray-50"
+                          >
+                            <ExternalLink className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                            <span>Chia sẻ qua ứng dụng</span>
+                          </button>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           </div>

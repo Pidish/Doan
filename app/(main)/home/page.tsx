@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { PostCard } from '@/src/components/PostCard'
 import { RightSidebar } from '@/src/components/RightSidebar'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2, PenSquare, Sparkles, TrendingUp, ImagePlus, X } from 'lucide-react'
+import { Loader2, PenSquare, Sparkles, TrendingUp, ImagePlus, X, Users, Compass } from 'lucide-react'
 
 interface Post {
   id: string
@@ -38,7 +38,7 @@ export default function HomePage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar?: string } | null>(null)
-  const [activeTab, setActiveTab] = useState<'FOR_YOU' | 'FOLLOWING' | 'SONG_XANH' | 'TAM_LY_HOC' | 'TINH_LANG' | 'SANG_TAO' | 'AI_RECOMMENDED'>('FOR_YOU')
+  const [activeTab, setActiveTab] = useState<'FOR_YOU' | 'SONG_XANH' | 'TAM_LY_HOC' | 'TINH_LANG' | 'SANG_TAO' | 'AI_RECOMMENDED'>('FOR_YOU')
   const [aiProfile, setAiProfile] = useState<{
     topCategories: { key: string; label: string; score: number }[]
     totalLikes: number
@@ -56,14 +56,17 @@ export default function HomePage() {
     setLoading(true)
     try {
       let url: string
-      if (currentTab === 'FOLLOWING') {
-        url = `/api/posts/feed?userId=${userId ?? currentUser?.id ?? ''}`
-      } else if (currentTab === 'SONG_XANH' || currentTab === 'TAM_LY_HOC' || currentTab === 'TINH_LANG' || currentTab === 'SANG_TAO') {
-        url = cursor ? `/api/posts?category=${currentTab}&cursor=${cursor}` : `/api/posts?category=${currentTab}`
-      } else if (currentTab === 'AI_RECOMMENDED') {
+      if (currentTab === 'AI_RECOMMENDED') {
         url = '/api/posts/recommended'
       } else {
-        url = cursor ? `/api/posts?cursor=${cursor}` : '/api/posts'
+        // Tất cả các tab đều dùng feed (chỉ bài của người follow + bản thân)
+        const uid = userId ?? currentUser?.id ?? ''
+        const categoryParam = ['SONG_XANH', 'TAM_LY_HOC', 'TINH_LANG', 'SANG_TAO'].includes(currentTab)
+          ? `&category=${currentTab}`
+          : ''
+        url = cursor
+          ? `/api/posts/feed?userId=${uid}${categoryParam}&cursor=${cursor}`
+          : `/api/posts/feed?userId=${uid}${categoryParam}`
       }
       const res = await fetch(url, { headers: { Authorization: `Bearer ${t}` } })
       const data = await res.json()
@@ -89,7 +92,7 @@ export default function HomePage() {
     if (!t) return
     setToken(t)
 
-    const validTabs = ['FOR_YOU', 'FOLLOWING', 'SONG_XANH', 'TAM_LY_HOC', 'TINH_LANG', 'SANG_TAO', 'AI_RECOMMENDED']
+    const validTabs = ['FOR_YOU', 'SONG_XANH', 'TAM_LY_HOC', 'TINH_LANG', 'SANG_TAO', 'AI_RECOMMENDED']
     const urlTab = new URLSearchParams(window.location.search).get('tab')
     const initialTab = (urlTab && validTabs.includes(urlTab) ? urlTab : 'FOR_YOU') as typeof activeTab
     if (initialTab !== 'FOR_YOU') setActiveTab(initialTab)
@@ -289,8 +292,7 @@ export default function HomePage() {
         {/* Tabs */}
         {(() => {
           const tabs = [
-            { key: 'FOR_YOU', label: 'Dành cho bạn' },
-            { key: 'FOLLOWING', label: 'Đang theo dõi' },
+            { key: 'FOR_YOU', label: '🏠 Đang theo dõi' },
             { key: 'AI_RECOMMENDED', label: '✨ AI Gợi ý' },
             { key: 'TINH_LANG', label: 'Tĩnh lặng' },
             { key: 'SONG_XANH', label: 'Thiên nhiên' },
@@ -353,26 +355,49 @@ export default function HomePage() {
 
         {/* Posts */}
         {loading ? (
-          <div className="flex justify-center py-20">
+          <div suppressHydrationWarning className="flex justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-emerald-700" />
           </div>
         ) : posts.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
-            {activeTab === 'AI_RECOMMENDED' ? (
+          <div className="text-center py-16 text-gray-400">
+          {activeTab === 'AI_RECOMMENDED' ? (
               <>
                 <Sparkles className="w-12 h-12 mx-auto mb-4 text-violet-300" />
                 <p className="text-lg font-medium text-gray-600">AI đang học sở thích của bạn</p>
                 <p className="text-sm mt-2">Hãy like và bình luận thêm để nhận gợi ý phù hợp hơn!</p>
               </>
             ) : (
-              <>
-                <p className="text-lg font-medium">
-                  {activeTab === 'FOLLOWING' ? 'Chưa có bài viết từ người bạn theo dõi' : 'Chưa có bài viết nào'}
-                </p>
-                <p className="text-sm mt-2">
-                  {activeTab === 'FOLLOWING' ? 'Hãy theo dõi thêm người dùng để xem bài viết của họ!' : 'Hãy là người đầu tiên chia sẻ!'}
-                </p>
-              </>
+              // Banner khám phá khi chưa follow ai
+              <div className="flex flex-col items-center gap-6 py-4">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-100 to-teal-100 flex items-center justify-center">
+                  <Users className="w-10 h-10 text-emerald-500" />
+                </div>
+                <div>
+                  <p className="text-xl font-bold text-gray-700 mb-2">Feed của bạn đang trống</p>
+                  <p className="text-sm text-gray-400 max-w-xs mx-auto leading-relaxed">
+                    {['SONG_XANH', 'TAM_LY_HOC', 'TINH_LANG', 'SANG_TAO'].includes(activeTab)
+                      ? 'Những người bạn theo dõi chưa có bài viết ở chủ đề này.'
+                      : 'Hãy theo dõi những người bạn quan tâm để thấy bài viết của họ xuất hiện ở đây.'}
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <a
+                    href="/explore"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-full font-semibold text-sm hover:bg-emerald-700 hover:-translate-y-0.5 transition-all shadow-sm"
+                  >
+                    <Compass className="w-4 h-4" />
+                    Khám phá người dùng
+                  </a>
+                  <button
+                    onClick={() => setActiveTab('AI_RECOMMENDED')}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-violet-50 text-violet-700 border border-violet-200 rounded-full font-semibold text-sm hover:bg-violet-100 transition-all"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Xem AI gợi ý
+                  </button>
+                </div>
+                <p className="text-xs text-gray-300">Bài viết của bạn vẫn hiển thị cho người theo dõi bạn</p>
+              </div>
             )}
           </div>
         ) : (

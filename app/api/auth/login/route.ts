@@ -50,11 +50,13 @@ export async function POST(req: NextRequest) {
       }
     })
 
-  } catch (error) {
-    console.error("Login error:", error)
-    return NextResponse.json(
-      { error: "Something went wrong" },
-      { status: 500 }
-    )
+  } catch (error: any) {
+    const msg = error?.message || String(error)
+    console.error("Login error:", msg)
+
+    if (msg.includes('channel_binding') || msg.includes('SASL') || msg.includes('connect')) {
+      return NextResponse.json({ error: 'Không thể kết nối cơ sở dữ liệu. Vui lòng thử lại.' }, { status: 503 })
+    }
+    return NextResponse.json({ error: 'Đã có lỗi xảy ra, vui lòng thử lại.' }, { status: 500 })
   }
 }
