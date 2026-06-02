@@ -120,6 +120,15 @@ export function Sidebar() {
     return () => clearTimeout(t)
   }, [toast])
 
+  // Broadcast counts to mobile components
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('nexora:notif-count', { detail: unreadCount }))
+  }, [unreadCount])
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('nexora:msg-count', { detail: unreadMessages }))
+  }, [unreadMessages])
+
   const navItems = [
     { icon: Home, label: 'Trang chủ', path: '/home', badge: 0 },
     { icon: Compass, label: 'Khám phá', path: '/explore', badge: 0 },
@@ -207,7 +216,7 @@ export function Sidebar() {
 
       {/* Toast thông báo realtime */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-[9999] w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
+        <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 z-[9999] w-[calc(100vw-2rem)] md:w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
           <div className="flex items-start gap-3 p-4">
             {/* Avatar + icon loại */}
             <div className="relative flex-shrink-0">
