@@ -142,8 +142,6 @@ export default function MessagesPage() {
           }
         }
         setConversationMap(newConvMap)
-        setUnreadSet(newUnread)
-        window.dispatchEvent(new CustomEvent('message-unread-update', { detail: newUnread.size }))
 
         // Sort following: có tin nhắn → xếp theo thời gian mới nhất, không có → cuối danh sách
         const sortedFollowed = [...followed].sort((a, b) => {
@@ -155,7 +153,15 @@ export default function MessagesPage() {
           return bTime.localeCompare(aTime)
         })
         setFollowingUsers(sortedFollowed)
-        if (sortedFollowed.length > 0) setSelectedUser(sortedFollowed[0])
+        if (sortedFollowed.length > 0) {
+          const firstUser = sortedFollowed[0]
+          setSelectedUser(firstUser)
+          // Auto-selected conversation counts as read immediately
+          localStorage.setItem(`msgLastRead_${firstUser.id}`, new Date().toISOString())
+          newUnread.delete(firstUser.id)
+        }
+        setUnreadSet(newUnread)
+        window.dispatchEvent(new CustomEvent('message-unread-update', { detail: newUnread.size }))
       } catch (err) {
         console.error('Error:', err)
       } finally {
@@ -582,9 +588,9 @@ export default function MessagesPage() {
 
   const handleSelectUser = (user: User) => {
     setSelectedUser(user)
-    // Đánh dấu đã đọc
     localStorage.setItem(`msgLastRead_${user.id}`, new Date().toISOString())
     setUnreadSet(prev => {
+      if (!prev.has(user.id)) return prev
       const next = new Set(prev)
       next.delete(user.id)
       window.dispatchEvent(new CustomEvent('message-unread-update', { detail: next.size }))
