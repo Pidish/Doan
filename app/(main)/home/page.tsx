@@ -5,7 +5,14 @@ import Link from 'next/link'
 import { PostCard } from '@/src/components/PostCard'
 import { RightSidebar } from '@/src/components/RightSidebar'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2, PenSquare, Sparkles, TrendingUp, ImagePlus, X, Users, Compass, ShieldAlert, Clock } from 'lucide-react'
+import { Loader2, PenSquare, Sparkles, TrendingUp, ImagePlus, X, Users, Compass, ShieldAlert, Clock, Smile } from 'lucide-react'
+
+const EMOJIS = [
+  '😀','😊','😍','🥰','😎','🤩','😄','😁','🎉','❤️',
+  '💕','💯','🌟','✨','🙌','👏','🔥','💪','🌈','🌸',
+  '😂','🤣','😆','😜','🤔','🙏','💭','💡','📝','🎵',
+  '🌿','🍃','🌻','🌺','🦋','🌙','⭐','🌊','🏔️','🌅',
+]
 
 interface Post {
   id: string
@@ -33,8 +40,12 @@ export default function HomePage() {
   const [posting, setPosting] = useState(false)
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [isVideoMedia, setIsVideoMedia] = useState(false)
   const [uploading, setUploading] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const emojiPickerRef = useRef<HTMLDivElement>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar?: string; postBannedUntil?: string | null } | null>(null)
@@ -130,6 +141,18 @@ export default function HomePage() {
     return () => clearInterval(id)
   }, [currentUser?.postBannedUntil])
 
+  // Close emoji picker on outside click
+  useEffect(() => {
+    if (!showEmojiPicker) return
+    const handler = (e: MouseEvent) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showEmojiPicker])
+
   // Listen for tab-change events from RightSidebar trending clicks
   useEffect(() => {
     const handler = (e: Event) => {
@@ -146,8 +169,14 @@ export default function HomePage() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) { setError('Ảnh không được vượt quá 5MB'); return }
+    const isVid = file.type.startsWith('video/')
+    const maxSize = isVid ? 100 * 1024 * 1024 : 10 * 1024 * 1024
+    if (file.size > maxSize) {
+      setError(isVid ? 'Video không được vượt quá 100MB' : 'Ảnh không được vượt quá 10MB')
+      return
+    }
     setImageFile(file)
+    setIsVideoMedia(isVid)
     setImagePreview(URL.createObjectURL(file))
     setError('')
   }
@@ -155,7 +184,18 @@ export default function HomePage() {
   const removeImage = () => {
     setImageFile(null)
     setImagePreview(null)
+    setIsVideoMedia(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const insertEmoji = (emoji: string) => {
+    const ta = textareaRef.current
+    if (!ta) { setNewPost(prev => prev + emoji); return }
+    const start = ta.selectionStart ?? newPost.length
+    const end = ta.selectionEnd ?? newPost.length
+    const updated = newPost.slice(0, start) + emoji + newPost.slice(end)
+    setNewPost(updated)
+    setTimeout(() => { ta.setSelectionRange(start + emoji.length, start + emoji.length); ta.focus() }, 0)
   }
 
   const handleCreatePost = async () => {
@@ -262,6 +302,7 @@ export default function HomePage() {
             </Link>
             <div className="flex-1 min-w-0">
               <textarea
+                ref={textareaRef}
                 value={newPost}
                 onChange={e => setNewPost(e.target.value)}
                 placeholder={banTimeLeft ? `Bạn không thể đăng bài trong ${banTimeLeft} nữa...` : 'Bạn đang nghĩ gì vậy?'}
@@ -270,10 +311,14 @@ export default function HomePage() {
                 rows={3}
               />
 
-              {/* Image preview */}
+              {/* Media preview */}
               {imagePreview && (
-                <div className="relative mt-2 rounded-xl overflow-hidden border border-gray-100">
-                  <img src={imagePreview} alt="preview" className="w-full max-h-64 object-cover" />
+                <div className="relative mt-2 rounded-xl overflow-hidden border border-gray-100 bg-black/5">
+                  {isVideoMedia ? (
+                    <video src={imagePreview} controls className="w-full max-h-64 object-contain" />
+                  ) : (
+                    <img src={imagePreview} alt="preview" className="w-full max-h-64 object-cover" />
+                  )}
                   <button
                     onClick={removeImage}
                     className="absolute top-2 right-2 w-7 h-7 bg-black/60 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors"
@@ -291,20 +336,50 @@ export default function HomePage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/gif,image/webp"
+            accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,video/x-msvideo"
             className="hidden"
             onChange={handleImageChange}
           />
 
           <div className="px-5 pb-4 flex items-center justify-between border-t border-gray-50 pt-3">
             <div className="flex items-center gap-3">
+              {/* Emoji picker */}
+              <div ref={emojiPickerRef} className="relative">
+                <button
+                  onClick={() => setShowEmojiPicker(v => !v)}
+                  disabled={!!banTimeLeft}
+                  className="flex items-center gap-1.5 text-gray-400 hover:text-emerald-600 transition-colors text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Smile className="w-4 h-4" />
+                  <span>Biểu cảm</span>
+                </button>
+                {showEmojiPicker && (
+                  <div className="absolute bottom-full left-0 mb-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-3 z-30">
+                    <div className="grid grid-cols-10 gap-0.5">
+                      {EMOJIS.map(emoji => (
+                        <button
+                          key={emoji}
+                          onClick={() => { insertEmoji(emoji); setShowEmojiPicker(false) }}
+                          className="text-lg hover:bg-gray-100 rounded-lg p-1 transition-colors leading-none"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Media upload */}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 text-gray-400 hover:text-emerald-600 transition-colors text-xs font-medium"
+                disabled={!!banTimeLeft}
+                className="flex items-center gap-1.5 text-gray-400 hover:text-emerald-600 transition-colors text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ImagePlus className="w-4 h-4" />
-                <span>Thêm ảnh</span>
+                <span>Ảnh / Video</span>
               </button>
+
               <p className="text-xs text-gray-300">{newPost.length > 0 ? `${newPost.length}/500` : ''}</p>
             </div>
             <button
@@ -313,7 +388,7 @@ export default function HomePage() {
               className="flex items-center gap-2 px-5 py-2 bg-emerald-700 text-white rounded-full font-semibold text-sm hover:bg-emerald-800 hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
             >
               {uploading ? (
-                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang tải ảnh...</>
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {isVideoMedia ? 'Đang tải video...' : 'Đang tải ảnh...'}</>
               ) : posting ? (
                 <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Đang đăng...</>
               ) : (

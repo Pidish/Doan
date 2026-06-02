@@ -174,6 +174,8 @@ export function PostCard({ post }: PostCardProps) {
     }
   }
 
+  const isVideoUrl = (url: string) => /\.(mp4|webm|mov|avi)(\?.*)?$/i.test(url)
+
   const timeAgo = (date: string) => {
     const diff = Date.now() - new Date(date).getTime()
     const mins = Math.floor(diff / 60000)
@@ -255,14 +257,23 @@ export function PostCard({ post }: PostCardProps) {
           </div>
         )}
 
-        {/* Image */}
+        {/* Image / Video */}
         {post.image && (
           <div className="rounded-xl overflow-hidden mb-4 bg-gray-50 border border-gray-100">
-            <img
-              src={post.image}
-              alt="Post content"
-              className="w-full h-auto object-cover hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
-            />
+            {isVideoUrl(post.image) ? (
+              <video
+                src={post.image}
+                controls
+                className="w-full max-h-[480px] object-contain"
+                preload="metadata"
+              />
+            ) : (
+              <img
+                src={post.image}
+                alt="Post content"
+                className="w-full h-auto object-cover hover:scale-[1.02] transition-transform duration-500 cursor-pointer"
+              />
+            )}
           </div>
         )}
 
