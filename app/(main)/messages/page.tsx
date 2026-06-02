@@ -50,6 +50,9 @@ const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
   ],
 }
 
@@ -104,6 +107,8 @@ export default function MessagesPage() {
   const callStateRef = useRef<CallState>('idle')
   const incomingCallRef = useRef<IncomingCallInfo | null>(null)
   const handleCallSignalRef = useRef<((p: { type: string; fromUserId: string; data: Record<string, unknown> }) => void) | null>(null)
+  // Buffer ICE candidates that arrive before remote description is set
+  const iceCandidateBuffer = useRef<RTCIceCandidateInit[]>([])
 
   // Fetch initial data
   useEffect(() => {
@@ -468,6 +473,11 @@ export default function MessagesPage() {
       await peerConnectionRef.current.setRemoteDescription(
         new RTCSessionDescription(data.answer as RTCSessionDescriptionInit)
       )
+      // Drain buffered ICE candidates that arrived before remote description was set
+      for (const c of iceCandidateBuffer.current) {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+      }
+      iceCandidateBuffer.current = []
       setCallState('connected')
       // Re-apply local stream after the video overlay mounts (caller side)
       setTimeout(() => {
@@ -477,10 +487,15 @@ export default function MessagesPage() {
       }, 50)
     }
 
-    if (type === 'ice-candidate' && peerConnectionRef.current) {
-      try {
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate as RTCIceCandidateInit))
-      } catch {}
+    if (type === 'ice-candidate') {
+      const pc = peerConnectionRef.current
+      if (pc && pc.remoteDescription) {
+        // Remote description already set — add immediately
+        await pc.addIceCandidate(new RTCIceCandidate(data.candidate as RTCIceCandidateInit)).catch(() => {})
+      } else {
+        // Peer connection not ready yet — buffer until after setRemoteDescription
+        iceCandidateBuffer.current.push(data.candidate as RTCIceCandidateInit)
+      }
     }
 
     if (type === 'call-end') {
@@ -518,6 +533,11 @@ export default function MessagesPage() {
       stream.getTracks().forEach(track => pc.addTrack(track, stream))
 
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer))
+      // Drain ICE candidates buffered while waiting for user to accept
+      for (const c of iceCandidateBuffer.current) {
+        await pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
+      }
+      iceCandidateBuffer.current = []
       const answer = await pc.createAnswer()
       await pc.setLocalDescription(answer)
 
@@ -550,6 +570,7 @@ export default function MessagesPage() {
   }
 
   const endCall = async (fromRemote = false) => {
+    iceCandidateBuffer.current = []
     const wasConnected = callStateRef.current === 'connected'
     const duration = callDurationRef.current
     const cType = callTypeRef.current
