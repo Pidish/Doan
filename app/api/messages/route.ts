@@ -50,6 +50,15 @@ export async function POST(req: NextRequest) {
 
     await pusher.trigger(channelName, 'new-message', messageData)
 
+    // Gửi event đến personal channel của người nhận để cập nhật badge + sort realtime
+    await pusher.trigger(`user-${receiverId}`, 'new-direct-message', {
+      senderId,
+      senderName: saved.sender.name,
+      senderAvatar: saved.sender.avatar,
+      lastMessage: message,
+      timestamp: saved.createdAt.toISOString(),
+    })
+
     return NextResponse.json({ success: true, data: messageData })
 
   } catch (error) {

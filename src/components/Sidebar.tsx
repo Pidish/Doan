@@ -27,18 +27,36 @@ export function Sidebar() {
   const pathname = usePathname()
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [unreadMessages, setUnreadMessages] = useState(0)
   const [toast, setToast] = useState<ToastNotif | null>(null)
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken')
     if (!token) return
 
+    // Tính số tin nhắn chưa đọc từ conversations
+    const calcUnreadMsgs = async (userId: string) => {
+      try {
+        const res = await fetch('/api/messages/conversations', { headers: { Authorization: `Bearer ${token}` } })
+        const data = await res.json()
+        let count = 0
+        for (const conv of (data.data || [])) {
+          const lastRead = localStorage.getItem(`msgLastRead_${conv.userId}`) || '0'
+          if (conv.lastMessageSenderId !== userId && new Date(conv.lastMessageAt) > new Date(lastRead)) count++
+        }
+        setUnreadMessages(count)
+      } catch { }
+    }
+
     // Lấy thông tin user + số thông báo chưa đọc
     Promise.all([
       fetch('/api/me', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch('/api/notifications', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
     ]).then(([meData, notifData]) => {
-      if (meData?.data) setCurrentUser(meData.data)
+      if (meData?.data) {
+        setCurrentUser(meData.data)
+        calcUnreadMsgs(meData.data.id)
+      }
       setUnreadCount(notifData?.unreadCount ?? 0)
     }).catch(() => {})
 
@@ -63,6 +81,10 @@ export function Sidebar() {
       } catch { }
     }
 
+    // Lắng nghe event từ messages page (instant update)
+    const onMsgUpdate = (e: Event) => setUnreadMessages((e as CustomEvent<number>).detail)
+    window.addEventListener('message-unread-update', onMsgUpdate)
+
     const onNotif = (e: Event) => setUnreadCount((e as CustomEvent<number>).detail)
     window.addEventListener('notification-read', onNotif)
 
@@ -78,6 +100,7 @@ export function Sidebar() {
 
     return () => {
       es.close()
+      window.removeEventListener('message-unread-update', onMsgUpdate)
       window.removeEventListener('notification-read', onNotif)
       window.removeEventListener('privacy-updated', onPrivacy)
     }
@@ -94,7 +117,7 @@ export function Sidebar() {
     { icon: Home, label: 'Trang chủ', path: '/home', badge: 0 },
     { icon: Compass, label: 'Khám phá', path: '/explore', badge: 0 },
     { icon: Bell, label: 'Thông báo', path: '/notifications', badge: unreadCount },
-    { icon: Mail, label: 'Tin nhắn', path: '/messages', badge: 0 },
+    { icon: Mail, label: 'Tin nhắn', path: '/messages', badge: unreadMessages },
     { icon: User, label: 'Hồ sơ', path: '/profile', badge: 0 },
     { icon: Settings, label: 'Cài đặt', path: '/settings', badge: 0 },
   ]

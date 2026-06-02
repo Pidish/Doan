@@ -70,6 +70,11 @@ export default function MessagesPage() {
   const [showPlusMenu, setShowPlusMenu] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
 
+  // Conversation map: userId → { lastMessage, lastMessageAt, lastMessageSenderId }
+  interface ConvInfo { lastMessage: string; lastMessageAt: string; lastMessageSenderId: string }
+  const [conversationMap, setConversationMap] = useState<Map<string, ConvInfo>>(new Map())
+  const [unreadSet, setUnreadSet] = useState<Set<string>>(new Set())
+
   // --- Call state ---
   const [callState, setCallState] = useState<CallState>('idle')
   const [callType, setCallType] = useState<CallType>('audio')
@@ -121,9 +126,36 @@ export default function MessagesPage() {
 
         const followed = allUsers.filter(u => followingIdSet.has(u.id))
         const notFollowed = allUsers.filter(u => !followingIdSet.has(u.id))
-        setFollowingUsers(followed)
         setSuggestedUsers(notFollowed)
-        if (followed.length > 0) setSelectedUser(followed[0])
+
+        // Lấy danh sách conversations để sort theo tin nhắn mới nhất
+        const convsRes = await fetch('/api/messages/conversations', { headers: { Authorization: `Bearer ${token}` } })
+        const convsData = await convsRes.json()
+        const newConvMap = new Map<string, ConvInfo>()
+        const newUnread = new Set<string>()
+
+        for (const c of (convsData.data || [])) {
+          newConvMap.set(c.userId, { lastMessage: c.lastMessage, lastMessageAt: c.lastMessageAt, lastMessageSenderId: c.lastMessageSenderId })
+          const lastRead = localStorage.getItem(`msgLastRead_${c.userId}`) || '0'
+          if (c.lastMessageSenderId !== me.id && new Date(c.lastMessageAt) > new Date(lastRead)) {
+            newUnread.add(c.userId)
+          }
+        }
+        setConversationMap(newConvMap)
+        setUnreadSet(newUnread)
+        window.dispatchEvent(new CustomEvent('message-unread-update', { detail: newUnread.size }))
+
+        // Sort following: có tin nhắn → xếp theo thời gian mới nhất, không có → cuối danh sách
+        const sortedFollowed = [...followed].sort((a, b) => {
+          const aTime = newConvMap.get(a.id)?.lastMessageAt ?? ''
+          const bTime = newConvMap.get(b.id)?.lastMessageAt ?? ''
+          if (!aTime && !bTime) return 0
+          if (!aTime) return 1
+          if (!bTime) return -1
+          return bTime.localeCompare(aTime)
+        })
+        setFollowingUsers(sortedFollowed)
+        if (sortedFollowed.length > 0) setSelectedUser(sortedFollowed[0])
       } catch (err) {
         console.error('Error:', err)
       } finally {
@@ -174,6 +206,20 @@ export default function MessagesPage() {
     channelRef.current = pusherRef.current.subscribe(channelName)
     channelRef.current.bind('new-message', (data: Message) => {
       setMessages(prev => [...prev, data])
+      // Cập nhật conversation map + kéo lên đầu danh sách
+      const otherId = data.senderId === currentUser.id ? selectedUser.id : data.senderId
+      setConversationMap(prev => {
+        const next = new Map(prev)
+        next.set(otherId, { lastMessage: data.message, lastMessageAt: data.timestamp, lastMessageSenderId: data.senderId })
+        return next
+      })
+      setFollowingUsers(prev => {
+        const idx = prev.findIndex(u => u.id === otherId)
+        if (idx <= 0) return prev
+        const next = [...prev]
+        const [moved] = next.splice(idx, 1)
+        return [moved, ...next]
+      })
     })
     channelRef.current.bind('message-deleted', (data: { id: string; deletedAt: string }) => {
       setMessages(prev => prev.map(m => m.id === data.id ? { ...m, deletedAt: data.deletedAt } : m))
@@ -210,6 +256,41 @@ export default function MessagesPage() {
   useEffect(() => {
     selectedUserRef.current = selectedUser
   }, [selectedUser])
+
+  // Personal channel: nhận tin nhắn từ mọi conversation (kể cả không đang xem)
+  useEffect(() => {
+    if (!currentUser || !pusherRef.current) return
+    const personalCh = pusherRef.current.subscribe(`user-${currentUser.id}`)
+    personalCh.bind('new-direct-message', (data: { senderId: string; lastMessage: string; timestamp: string }) => {
+      // Cập nhật conversation map
+      setConversationMap(prev => {
+        const next = new Map(prev)
+        next.set(data.senderId, { lastMessage: data.lastMessage, lastMessageAt: data.timestamp, lastMessageSenderId: data.senderId })
+        return next
+      })
+      // Kéo người gửi lên đầu danh sách
+      setFollowingUsers(prev => {
+        const idx = prev.findIndex(u => u.id === data.senderId)
+        if (idx <= 0) return prev
+        const next = [...prev]
+        const [moved] = next.splice(idx, 1)
+        return [moved, ...next]
+      })
+      // Nếu không đang xem conversation này → thêm vào unread
+      if (data.senderId !== selectedUserRef.current?.id) {
+        setUnreadSet(prev => {
+          const next = new Set(prev)
+          next.add(data.senderId)
+          window.dispatchEvent(new CustomEvent('message-unread-update', { detail: next.size }))
+          return next
+        })
+      }
+    })
+    return () => {
+      personalCh.unbind_all()
+      pusherRef.current?.unsubscribe(`user-${currentUser.id}`)
+    }
+  }, [currentUser])
 
   // Sync callType to ref
   useEffect(() => {
@@ -497,6 +578,18 @@ export default function MessagesPage() {
     } finally {
       setFollowLoadingId(null)
     }
+  }
+
+  const handleSelectUser = (user: User) => {
+    setSelectedUser(user)
+    // Đánh dấu đã đọc
+    localStorage.setItem(`msgLastRead_${user.id}`, new Date().toISOString())
+    setUnreadSet(prev => {
+      const next = new Set(prev)
+      next.delete(user.id)
+      window.dispatchEvent(new CustomEvent('message-unread-update', { detail: next.size }))
+      return next
+    })
   }
 
   const sendMessage = async () => {
@@ -907,24 +1000,51 @@ export default function MessagesPage() {
           {filteredFollowing.length > 0 && (
             <>
               <p className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Đang theo dõi</p>
-              {filteredFollowing.map(user => (
-                <div
-                  key={user.id}
-                  onClick={() => setSelectedUser(user)}
-                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all ${selectedUser?.id === user.id ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
-                >
-                  <div className="relative flex-shrink-0">
-                    <img src={user.avatar || `https://i.pravatar.cc/48?u=${user.id}`} alt={user.name} className="w-12 h-12 rounded-full object-cover" />
-                    {user.showOnlineStatus !== false && (
-                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
-                    )}
+              {filteredFollowing.map(user => {
+                const conv = conversationMap.get(user.id)
+                const hasUnread = unreadSet.has(user.id)
+                const isSelected = selectedUser?.id === user.id
+                return (
+                  <div
+                    key={user.id}
+                    onClick={() => handleSelectUser(user)}
+                    className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all ${isSelected ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}
+                  >
+                    <div className="relative flex-shrink-0">
+                      <img src={user.avatar || `https://i.pravatar.cc/48?u=${user.id}`} alt={user.name} className="w-12 h-12 rounded-full object-cover" />
+                      {user.showOnlineStatus !== false && (
+                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <p className={`text-sm truncate ${hasUnread ? 'font-bold text-gray-900' : 'font-semibold text-gray-900'}`}>{user.name}</p>
+                        {conv && (
+                          <span className="text-[10px] text-gray-400 flex-shrink-0">
+                            {new Date(conv.lastMessageAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between gap-1 mt-0.5">
+                        {conv ? (
+                          <p className={`text-xs truncate ${hasUnread ? 'text-gray-800 font-medium' : 'text-gray-400'}`}>
+                            {conv.lastMessageSenderId === currentUser?.id ? 'Bạn: ' : ''}
+                            {conv.lastMessage.startsWith('__img__:') ? '📷 Hình ảnh' :
+                             conv.lastMessage.startsWith('__call_ended__:') ? '📞 Cuộc gọi kết thúc' :
+                             conv.lastMessage.startsWith('__call_missed__:') ? '📞 Cuộc gọi nhỡ' :
+                             conv.lastMessage.slice(0, 30) + (conv.lastMessage.length > 30 ? '…' : '')}
+                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-400 truncate">@{user.email.split('@')[0]}</p>
+                        )}
+                        {hasUnread && (
+                          <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full flex-shrink-0" />
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm text-gray-900 truncate">{user.name}</p>
-                    <p className="text-xs text-gray-400 truncate">@{user.email.split('@')[0]}</p>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </>
           )}
 
