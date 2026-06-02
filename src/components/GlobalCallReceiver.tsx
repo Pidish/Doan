@@ -44,7 +44,10 @@ export function GlobalCallReceiver() {
     const ch = pusher.subscribe(`call-${currentUserId}`)
 
     ch.bind('call-signal', (payload: { type: string; fromUserId: string; data: Record<string, unknown> }) => {
-      // If on messages page, let messages page handle it via its own subscription
+      // Always forward to messages page (or any listener) via window event
+      window.dispatchEvent(new CustomEvent('nexora:call-signal', { detail: payload }))
+
+      // Show overlay UI only when NOT on messages page (messages page has its own full UI)
       if (window.location.pathname.startsWith('/messages')) return
 
       if (payload.type === 'call-offer') {

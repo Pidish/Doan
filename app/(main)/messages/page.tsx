@@ -93,7 +93,6 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pusherRef = useRef<PusherClient | null>(null)
   const channelRef = useRef<Channel | null>(null)
-  const callChannelRef = useRef<Channel | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const plusMenuRef = useRef<HTMLDivElement>(null)
@@ -202,24 +201,14 @@ export default function MessagesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Subscribe to own call channel when currentUser is available
+  // Receive call signals from GlobalCallReceiver (always-mounted, single Pusher subscription)
   useEffect(() => {
-    if (!currentUser || !pusherRef.current) return
-    callChannelRef.current?.unbind_all()
-    callChannelRef.current?.unsubscribe()
-
-    const myCallChannel = pusherRef.current.subscribe(`call-${currentUser.id}`)
-    callChannelRef.current = myCallChannel
-
-    myCallChannel.bind('call-signal', (payload: { type: string; fromUserId: string; data: Record<string, unknown> }) => {
-      handleCallSignalRef.current?.(payload)
-    })
-
-    return () => {
-      myCallChannel.unbind_all()
+    const handler = (e: Event) => {
+      handleCallSignalRef.current?.((e as CustomEvent).detail)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser])
+    window.addEventListener('nexora:call-signal', handler)
+    return () => window.removeEventListener('nexora:call-signal', handler)
+  }, [])
 
   // Chat channel
   useEffect(() => {
