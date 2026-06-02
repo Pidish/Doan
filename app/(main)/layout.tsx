@@ -1,6 +1,7 @@
 import { Sidebar } from '../../src/components/Sidebar'
 import { MobileHeader } from '../../src/components/MobileHeader'
 import { BottomNav } from '../../src/components/BottomNav'
+import { GlobalCallReceiver } from '../../src/components/GlobalCallReceiver'
 
 export default function MainLayout({
   children,
@@ -15,6 +16,7 @@ export default function MainLayout({
         {children}
       </main>
       <BottomNav />
+      <GlobalCallReceiver />
     </div>
   )
 }

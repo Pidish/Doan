@@ -166,6 +166,17 @@ export default function MessagesPage() {
         }
         setUnreadSet(newUnread)
         window.dispatchEvent(new CustomEvent('message-unread-update', { detail: newUnread.size }))
+
+        // Pick up pending call forwarded by GlobalCallReceiver (user answered from another page)
+        const pendingRaw = sessionStorage.getItem('nexora_pending_call')
+        if (pendingRaw) {
+          sessionStorage.removeItem('nexora_pending_call')
+          try {
+            const pending = JSON.parse(pendingRaw)
+            setIncomingCall(pending)
+            setCallState('incoming')
+          } catch {}
+        }
       } catch (err) {
         console.error('Error:', err)
       } finally {
