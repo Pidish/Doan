@@ -100,6 +100,10 @@ export default function MessagesPage() {
   const localStreamRef = useRef<MediaStream | null>(null)
   const callTimerRef = useRef<NodeJS.Timeout | null>(null)
   const allUsersRef = useRef<User[]>([])
+  // Refs to always have fresh state inside async callbacks / Pusher handlers
+  const callStateRef = useRef<CallState>('idle')
+  const incomingCallRef = useRef<IncomingCallInfo | null>(null)
+  const handleCallSignalRef = useRef<((p: { type: string; fromUserId: string; data: Record<string, unknown> }) => void) | null>(null)
 
   // Fetch initial data
   useEffect(() => {
@@ -192,7 +196,7 @@ export default function MessagesPage() {
     callChannelRef.current = myCallChannel
 
     myCallChannel.bind('call-signal', (payload: { type: string; fromUserId: string; data: Record<string, unknown> }) => {
-      handleCallSignal(payload)
+      handleCallSignalRef.current?.(payload)
     })
 
     return () => {
@@ -262,6 +266,20 @@ export default function MessagesPage() {
   useEffect(() => {
     selectedUserRef.current = selectedUser
   }, [selectedUser])
+
+  // Keep call-related state refs fresh for use inside async/Pusher callbacks
+  useEffect(() => { callStateRef.current = callState }, [callState])
+  useEffect(() => { incomingCallRef.current = incomingCall }, [incomingCall])
+
+  // Re-apply local stream to overlay video element when call becomes connected
+  useEffect(() => {
+    if (callState === 'connected' && callType === 'video' && localStreamRef.current) {
+      const t = setTimeout(() => {
+        if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current
+      }, 50)
+      return () => clearTimeout(t)
+    }
+  }, [callState, callType])
 
   // Personal channel: nhận tin nhắn từ mọi conversation (kể cả không đang xem)
   useEffect(() => {
@@ -440,6 +458,12 @@ export default function MessagesPage() {
         new RTCSessionDescription(data.answer as RTCSessionDescriptionInit)
       )
       setCallState('connected')
+      // Re-apply local stream after the video overlay mounts (caller side)
+      setTimeout(() => {
+        if (localVideoRef.current && localStreamRef.current) {
+          localVideoRef.current.srcObject = localStreamRef.current
+        }
+      }, 50)
     }
 
     if (type === 'ice-candidate' && peerConnectionRef.current) {
@@ -449,7 +473,7 @@ export default function MessagesPage() {
     }
 
     if (type === 'call-end') {
-      endCall()
+      endCall(true)
     }
 
     if (type === 'call-reject') {
@@ -457,7 +481,6 @@ export default function MessagesPage() {
       closePeerConnection()
       stopLocalStream()
       setCallState('idle')
-      // Gửi tin nhắn cuộc gọi nhỡ
       const target = selectedUserRef.current
       if (target) {
         const cType = callTypeRef.current
@@ -465,19 +488,20 @@ export default function MessagesPage() {
       }
     }
   }
+  // Always keep the ref pointing to the latest version (fixes stale closure in Pusher binding)
+  handleCallSignalRef.current = handleCallSignal
 
   const acceptCall = async () => {
     if (!incomingCall || !currentUser) return
-    setCallType(incomingCall.callType)
-    setCallState('connected')
+    const callTypeToUse = incomingCall.callType
+    setCallType(callTypeToUse)
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: incomingCall.callType === 'video',
+        video: callTypeToUse === 'video',
       })
       localStreamRef.current = stream
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream
 
       const pc = createPeerConnection(incomingCall.fromUserId)
       stream.getTracks().forEach(track => pc.addTrack(track, stream))
@@ -490,6 +514,13 @@ export default function MessagesPage() {
         answer: { type: answer.type, sdp: answer.sdp },
       })
       setIncomingCall(null)
+      setCallState('connected')
+      // Apply local stream after overlay video element mounts
+      setTimeout(() => {
+        if (localVideoRef.current && localStreamRef.current) {
+          localVideoRef.current.srcObject = localStreamRef.current
+        }
+      }, 50)
     } catch (err) {
       console.error('Accept call error:', err)
       endCall()
@@ -507,18 +538,21 @@ export default function MessagesPage() {
     await sendCallSystemMessage(callerId, `__call_missed__:${cType}`)
   }
 
-  const endCall = async () => {
-    const wasConnected = callState === 'connected'
+  const endCall = async (fromRemote = false) => {
+    const wasConnected = callStateRef.current === 'connected'
     const duration = callDurationRef.current
     const cType = callTypeRef.current
     const target = selectedUserRef.current
-    const incoming = incomingCall
+    const incoming = incomingCallRef.current
 
-    if (callState !== 'idle' && target) {
-      await sendSignal('call-end', target.id, {}).catch(() => {})
-    }
-    if (incoming) {
-      await sendSignal('call-end', incoming.fromUserId, {}).catch(() => {})
+    // Only the side that initiated end sends the call-end signal to avoid loops
+    if (!fromRemote) {
+      if (callStateRef.current !== 'idle' && target) {
+        await sendSignal('call-end', target.id, {}).catch(() => {})
+      }
+      if (incoming) {
+        await sendSignal('call-end', incoming.fromUserId, {}).catch(() => {})
+      }
     }
     closePeerConnection()
     stopLocalStream()
@@ -528,17 +562,17 @@ export default function MessagesPage() {
     setIsCameraOff(false)
     setIsSpeakerOff(false)
 
-    // Gửi tin nhắn hệ thống sau khi kết thúc
-    const receiverId = target?.id || incoming?.fromUserId
-    if (receiverId) {
-      if (wasConnected && duration > 0) {
-        // Tin nhắn thời gian gọi
-        const mins = Math.floor(duration / 60).toString().padStart(2, '0')
-        const secs = (duration % 60).toString().padStart(2, '0')
-        await sendCallSystemMessage(receiverId, `__call_ended__:${cType}:${mins}:${secs}`)
-      } else if (!wasConnected) {
-        // Không kết nối được → cuộc gọi nhỡ
-        await sendCallSystemMessage(receiverId, `__call_missed__:${cType}`)
+    // Only the initiating side sends the system message to avoid duplicates
+    if (!fromRemote) {
+      const receiverId = target?.id || incoming?.fromUserId
+      if (receiverId) {
+        if (wasConnected && duration > 0) {
+          const mins = Math.floor(duration / 60).toString().padStart(2, '0')
+          const secs = (duration % 60).toString().padStart(2, '0')
+          await sendCallSystemMessage(receiverId, `__call_ended__:${cType}:${mins}:${secs}`)
+        } else if (!wasConnected) {
+          await sendCallSystemMessage(receiverId, `__call_missed__:${cType}`)
+        }
       }
     }
   }
@@ -955,7 +989,7 @@ export default function MessagesPage() {
                     <div className="flex flex-col items-center gap-1.5">
                       <motion.button
                         whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}
-                        onClick={endCall}
+                        onClick={() => endCall()}
                         className="w-12 h-12 rounded-full bg-red-500 flex items-center justify-center shadow-lg shadow-red-500/30"
                       >
                         <PhoneOff className="w-5 h-5 text-white" />
@@ -969,7 +1003,7 @@ export default function MessagesPage() {
                 {callState === 'calling' && (
                   <motion.button
                     whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}
-                    onClick={endCall}
+                    onClick={() => endCall()}
                     className="mt-2 w-16 h-16 rounded-full bg-red-500 flex items-center justify-center shadow-lg shadow-red-500/40"
                   >
                     <PhoneOff className="w-7 h-7 text-white" />
