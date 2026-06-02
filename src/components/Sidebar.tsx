@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Home, Compass, Bell, Mail, User, Settings, Heart, MessageCircle, UserPlus, ShieldAlert, X } from 'lucide-react'
+import { Home, Compass, Bell, Mail, User, Settings, Heart, MessageCircle, UserPlus, ShieldAlert, X, Sparkles } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 interface CurrentUser {
@@ -125,6 +125,7 @@ export function Sidebar() {
     { icon: Compass, label: 'Khám phá', path: '/explore', badge: 0 },
     { icon: Bell, label: 'Thông báo', path: '/notifications', badge: unreadCount },
     { icon: Mail, label: 'Tin nhắn', path: '/messages', badge: unreadMessages },
+    { icon: Sparkles, label: 'Nexora AI', path: '/ai', badge: 0 },
     { icon: User, label: 'Hồ sơ', path: '/profile', badge: 0 },
     { icon: Settings, label: 'Cài đặt', path: '/settings', badge: 0 },
   ]
