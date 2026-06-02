@@ -290,6 +290,13 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!currentUser || !pusherRef.current) return
     const personalCh = pusherRef.current.subscribe(`user-${currentUser.id}`)
+    // Call signals are sent to user-${id} channel (same as personal messages)
+    personalCh.bind('call-signal', (payload: { type: string; fromUserId: string; data: Record<string, unknown> }) => {
+      // Also dispatch window event so GlobalCallReceiver overlay clears if needed
+      window.dispatchEvent(new CustomEvent('nexora:call-signal', { detail: payload }))
+      handleCallSignalRef.current?.(payload)
+    })
+
     personalCh.bind('new-direct-message', (data: { senderId: string; lastMessage: string; timestamp: string }) => {
       // Cập nhật conversation map
       setConversationMap(prev => {
@@ -446,6 +453,7 @@ export default function MessagesPage() {
     const { type, fromUserId, data } = payload
 
     if (type === 'call-offer') {
+      if (callStateRef.current !== 'idle') return // already in a call, ignore duplicate
       const allUsers = allUsersRef.current
       const caller = allUsers.find(u => u.id === fromUserId)
       setIncomingCall({

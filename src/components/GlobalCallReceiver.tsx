@@ -41,7 +41,7 @@ export function GlobalCallReceiver() {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
     })
 
-    const ch = pusher.subscribe(`call-${currentUserId}`)
+    const ch = pusher.subscribe(`user-${currentUserId}`)
 
     ch.bind('call-signal', (payload: { type: string; fromUserId: string; data: Record<string, unknown> }) => {
       // Always forward to messages page (or any listener) via window event
