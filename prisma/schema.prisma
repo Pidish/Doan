@@ -25,6 +25,9 @@ model User {
   allowMessages     Boolean  @default(true)
   allowSearch       Boolean  @default(true)
 
+  // Posting ban (set when user posts BLOCKED content)
+  postBannedUntil   DateTime?
+
   posts    Post[]
   comments Comment[]
   likes    Like[]

@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
         showOnlineStatus: true,
         allowMessages: true,
         allowSearch: true,
+        postBannedUntil: true,
         _count: { select: { posts: true, followers: true, following: true } }
       }
     })

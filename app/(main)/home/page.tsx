@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { PostCard } from '@/src/components/PostCard'
 import { RightSidebar } from '@/src/components/RightSidebar'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2, PenSquare, Sparkles, TrendingUp, ImagePlus, X, Users, Compass } from 'lucide-react'
+import { Loader2, PenSquare, Sparkles, TrendingUp, ImagePlus, X, Users, Compass, ShieldAlert, Clock } from 'lucide-react'
 
 interface Post {
   id: string
@@ -37,7 +37,8 @@ export default function HomePage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [token, setToken] = useState<string | null>(null)
-  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar?: string } | null>(null)
+  const [currentUser, setCurrentUser] = useState<{ id: string; name: string; avatar?: string; postBannedUntil?: string | null } | null>(null)
+  const [banTimeLeft, setBanTimeLeft] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'FOR_YOU' | 'SONG_XANH' | 'TAM_LY_HOC' | 'TINH_LANG' | 'SANG_TAO' | 'AI_RECOMMENDED'>('FOR_YOU')
   const [aiProfile, setAiProfile] = useState<{
     topCategories: { key: string; label: string; score: number }[]
@@ -114,6 +115,21 @@ export default function HomePage() {
     }
   }, [activeTab])
 
+  // Countdown timer cho lệnh cấm đăng bài
+  useEffect(() => {
+    const calcLeft = () => {
+      if (!currentUser?.postBannedUntil) { setBanTimeLeft(null); return }
+      const ms = new Date(currentUser.postBannedUntil).getTime() - Date.now()
+      if (ms <= 0) { setBanTimeLeft(null); return }
+      const h = Math.floor(ms / 3600000)
+      const m = Math.floor((ms % 3600000) / 60000)
+      setBanTimeLeft(h > 0 ? `${h} giờ ${m} phút` : `${m} phút`)
+    }
+    calcLeft()
+    const id = setInterval(calcLeft, 60000)
+    return () => clearInterval(id)
+  }, [currentUser?.postBannedUntil])
+
   // Listen for tab-change events from RightSidebar trending clicks
   useEffect(() => {
     const handler = (e: Event) => {
@@ -173,8 +189,12 @@ export default function HomePage() {
         setNewPost('')
         removeImage()
         if (data.warning) setError(`⚠️ Bài đã đăng nhưng cần xem xét: ${data.warning}`)
+      } else if (res.status === 403 && data.banned) {
+        // Cập nhật trạng thái ban trong currentUser để hiển thị banner
+        setCurrentUser(prev => prev ? { ...prev, postBannedUntil: data.bannedUntil } : prev)
       } else if (res.status === 422 && data.blocked) {
-        setError(`🚫 ${data.error} — ${data.reason}`)
+        // Bài bị chặn → cập nhật ban
+        setCurrentUser(prev => prev ? { ...prev, postBannedUntil: data.bannedUntil } : prev)
       } else {
         setError(data.error || 'Không thể đăng bài')
       }
@@ -219,6 +239,19 @@ export default function HomePage() {
 
         {/* Tạo post mới */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-8 overflow-hidden">
+          {/* Ban banner */}
+          {banTimeLeft && (
+            <div className="flex items-center gap-3 px-5 py-3 bg-red-50 border-b border-red-100">
+              <ShieldAlert className="w-4 h-4 text-red-500 flex-shrink-0" />
+              <p className="text-xs text-red-700 flex-1">
+                <span className="font-semibold">Tài khoản bị hạn chế đăng bài</span> do vi phạm nội dung.
+              </p>
+              <span className="flex items-center gap-1 text-xs font-medium text-red-500 flex-shrink-0">
+                <Clock className="w-3.5 h-3.5" />
+                Còn {banTimeLeft}
+              </span>
+            </div>
+          )}
           <div className="p-5 flex gap-3">
             <Link href="/profile" className="flex-shrink-0 mt-0.5">
               <img
@@ -231,8 +264,9 @@ export default function HomePage() {
               <textarea
                 value={newPost}
                 onChange={e => setNewPost(e.target.value)}
-                placeholder="Bạn đang nghĩ gì vậy?"
-                className="w-full bg-gray-50 rounded-xl p-3.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none outline-none focus:bg-white focus:ring-2 focus:ring-emerald-200 border border-transparent focus:border-emerald-200 transition-all"
+                placeholder={banTimeLeft ? `Bạn không thể đăng bài trong ${banTimeLeft} nữa...` : 'Bạn đang nghĩ gì vậy?'}
+                disabled={!!banTimeLeft}
+                className="w-full bg-gray-50 rounded-xl p-3.5 text-sm text-gray-900 placeholder:text-gray-400 resize-none outline-none focus:bg-white focus:ring-2 focus:ring-emerald-200 border border-transparent focus:border-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 rows={3}
               />
 
@@ -275,7 +309,7 @@ export default function HomePage() {
             </div>
             <button
               onClick={handleCreatePost}
-              disabled={posting || uploading || (!newPost.trim() && !imageFile)}
+              disabled={posting || uploading || (!newPost.trim() && !imageFile) || !!banTimeLeft}
               className="flex items-center gap-2 px-5 py-2 bg-emerald-700 text-white rounded-full font-semibold text-sm hover:bg-emerald-800 hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
             >
               {uploading ? (

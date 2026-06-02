@@ -24,6 +24,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Content must be under 500 characters" }, { status: 400 })
     }
 
+    // Kiểm tra xem user có đang bị cấm đăng bài không
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { postBannedUntil: true },
+    })
+
+    if (user?.postBannedUntil && user.postBannedUntil > new Date()) {
+      const remainingMs = user.postBannedUntil.getTime() - Date.now()
+      const remainingHours = Math.ceil(remainingMs / (1000 * 60 * 60))
+      const remainingMins = Math.ceil(remainingMs / (1000 * 60))
+      const timeLeft = remainingHours >= 1 ? `${remainingHours} giờ` : `${remainingMins} phút`
+      return NextResponse.json({
+        error: `Tài khoản của bạn đang bị hạn chế đăng bài do vi phạm nội dung. Vui lòng thử lại sau ${timeLeft}.`,
+        banned: true,
+        bannedUntil: user.postBannedUntil.toISOString(),
+      }, { status: 403 })
+    }
+
     const moderation = await moderateContent(content || '')
     const category = moderation.category
 
@@ -46,41 +64,70 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // Create moderation log + notification for non-safe content
+    // Xử lý vi phạm
     if (moderation.result !== 'SAFE') {
       const adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
-      const notifMessage = moderation.result === 'BLOCKED'
-        ? `Bài viết của bạn đã bị chặn: ${moderation.reason}`
-        : `Bài viết của bạn đang chờ xét duyệt: ${moderation.reason}`
 
+      if (moderation.result === 'BLOCKED') {
+        // Cấm đăng bài 24 giờ
+        const bannedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        await prisma.user.update({
+          where: { id: userId },
+          data: { postBannedUntil: bannedUntil },
+        })
+
+        await Promise.all([
+          adminUser ? prisma.moderationLog.create({
+            data: {
+              postId: post.id,
+              moderatorId: adminUser.id,
+              authorId: userId,
+              content: content || '',
+              result: 'BLOCKED',
+              reason: moderation.reason,
+            }
+          }).catch(() => {}) : Promise.resolve(),
+          // Thông báo bị chặn + bị cấm
+          prisma.notification.create({
+            data: {
+              type: 'WARNING',
+              message: `Bài viết của bạn đã bị chặn: ${moderation.reason}. Tài khoản bị hạn chế đăng bài trong 24 giờ.`,
+              userId,
+              postId: post.id,
+            }
+          }).catch(() => {}),
+        ])
+
+        return NextResponse.json({
+          error: 'Bài viết vi phạm tiêu chuẩn cộng đồng và không thể đăng.',
+          reason: moderation.reason,
+          blocked: true,
+          banned: true,
+          bannedUntil: bannedUntil.toISOString(),
+        }, { status: 422 })
+      }
+
+      // WARNING — không cấm, chỉ ẩn bài và thông báo
       await Promise.all([
         adminUser ? prisma.moderationLog.create({
           data: {
             postId: post.id,
             moderatorId: adminUser.id,
             authorId: userId,
-            content,
-            result: moderation.result as any,
+            content: content || '',
+            result: 'WARNING',
             reason: moderation.reason,
           }
         }).catch(() => {}) : Promise.resolve(),
         prisma.notification.create({
           data: {
             type: 'WARNING',
-            message: notifMessage,
+            message: `Bài viết của bạn đang chờ xét duyệt: ${moderation.reason}`,
             userId,
             postId: post.id,
           }
         }).catch(() => {}),
       ])
-    }
-
-    if (moderation.result === 'BLOCKED') {
-      return NextResponse.json({
-        error: 'Bài viết vi phạm tiêu chuẩn cộng đồng và không thể đăng.',
-        reason: moderation.reason,
-        blocked: true,
-      }, { status: 422 })
     }
 
     return NextResponse.json({
