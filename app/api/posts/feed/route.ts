@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
 import { verifyAccessToken } from "@/lib/auth"
+import { CategoryType } from "@prisma/client"
 
 export async function GET(req: Request) {
   try {
@@ -23,7 +24,7 @@ export async function GET(req: Request) {
     const posts = await prisma.post.findMany({
       where: {
         status: 'ACTIVE',
-        ...(category ? { category } : {}),
+        ...(category ? { category: category as CategoryType } : {}),
         OR: [
           // Bài của người mình đang follow
           { author: { followers: { some: { followerId: userId } } } },
