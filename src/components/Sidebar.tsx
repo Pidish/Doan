@@ -34,11 +34,35 @@ export function Sidebar() {
     const token = localStorage.getItem('accessToken')
     if (!token) return
 
-    // Tính số tin nhắn chưa đọc từ conversations
+    // Flag: if messages page already dispatched correct count, skip calcUnreadMsgs result
+    let receivedMsgEvent = false
+
+    // Lắng nghe event từ messages page (instant update)
+    const onMsgUpdate = (e: Event) => {
+      receivedMsgEvent = true
+      setUnreadMessages((e as CustomEvent<number>).detail)
+    }
+    window.addEventListener('message-unread-update', onMsgUpdate)
+
+    const onNotif = (e: Event) => setUnreadCount((e as CustomEvent<number>).detail)
+    window.addEventListener('notification-read', onNotif)
+
+    const onPrivacy = () => {
+      const t = localStorage.getItem('accessToken')
+      if (!t) return
+      fetch('/api/me', { headers: { Authorization: `Bearer ${t}` } })
+        .then(r => r.json())
+        .then(d => { if (d?.data) setCurrentUser(d.data) })
+        .catch(() => {})
+    }
+    window.addEventListener('privacy-updated', onPrivacy)
+
+    // Tính số tin nhắn chưa đọc (chỉ dùng nếu messages page chưa dispatch event)
     const calcUnreadMsgs = async (userId: string) => {
       try {
         const res = await fetch('/api/messages/conversations', { headers: { Authorization: `Bearer ${token}` } })
         const data = await res.json()
+        if (receivedMsgEvent) return // messages page already set the correct count
         let count = 0
         for (const conv of (data.data || [])) {
           const lastRead = localStorage.getItem(`msgLastRead_${conv.userId}`) || '0'
@@ -80,23 +104,6 @@ export function Sidebar() {
         }
       } catch { }
     }
-
-    // Lắng nghe event từ messages page (instant update)
-    const onMsgUpdate = (e: Event) => setUnreadMessages((e as CustomEvent<number>).detail)
-    window.addEventListener('message-unread-update', onMsgUpdate)
-
-    const onNotif = (e: Event) => setUnreadCount((e as CustomEvent<number>).detail)
-    window.addEventListener('notification-read', onNotif)
-
-    const onPrivacy = () => {
-      const t = localStorage.getItem('accessToken')
-      if (!t) return
-      fetch('/api/me', { headers: { Authorization: `Bearer ${t}` } })
-        .then(r => r.json())
-        .then(d => { if (d?.data) setCurrentUser(d.data) })
-        .catch(() => {})
-    }
-    window.addEventListener('privacy-updated', onPrivacy)
 
     return () => {
       es.close()
