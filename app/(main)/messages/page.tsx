@@ -332,6 +332,14 @@ export default function MessagesPage() {
     callTypeRef.current = callType
   }, [callType])
 
+  // Auto-end unanswered outgoing call after 45 seconds
+  useEffect(() => {
+    if (callState !== 'calling') return
+    const t = setTimeout(() => endCall(), 45000)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callState])
+
   // Call timer
   useEffect(() => {
     if (callState === 'connected') {
@@ -369,11 +377,12 @@ export default function MessagesPage() {
 
   const sendSignal = async (type: string, targetUserId: string, data?: Record<string, unknown>) => {
     const token = localStorage.getItem('accessToken')
-    await fetch('/api/call', {
+    const res = await fetch('/api/call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ type, targetUserId, data }),
     })
+    if (!res.ok) throw new Error(`Signal "${type}" failed: ${res.status}`)
   }
 
   // Gửi tin nhắn hệ thống vào cuộc trò chuyện
@@ -468,21 +477,26 @@ export default function MessagesPage() {
     }
 
     if (type === 'call-answer' && peerConnectionRef.current) {
-      await peerConnectionRef.current.setRemoteDescription(
-        new RTCSessionDescription(data.answer as RTCSessionDescriptionInit)
-      )
-      // Drain buffered ICE candidates that arrived before remote description was set
-      for (const c of iceCandidateBuffer.current) {
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
-      }
-      iceCandidateBuffer.current = []
-      setCallState('connected')
-      // Re-apply local stream after the video overlay mounts (caller side)
-      setTimeout(() => {
-        if (localVideoRef.current && localStreamRef.current) {
-          localVideoRef.current.srcObject = localStreamRef.current
+      try {
+        await peerConnectionRef.current.setRemoteDescription(
+          new RTCSessionDescription(data.answer as RTCSessionDescriptionInit)
+        )
+        // Drain buffered ICE candidates that arrived before remote description was set
+        for (const c of iceCandidateBuffer.current) {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})
         }
-      }, 50)
+        iceCandidateBuffer.current = []
+        setCallState('connected')
+        // Re-apply local stream after the video overlay mounts (caller side)
+        setTimeout(() => {
+          if (localVideoRef.current && localStreamRef.current) {
+            localVideoRef.current.srcObject = localStreamRef.current
+          }
+        }, 50)
+      } catch (err) {
+        console.error('[WebRTC] setRemoteDescription(answer) failed:', err)
+        endCall()
+      }
     }
 
     if (type === 'ice-candidate') {
@@ -558,7 +572,7 @@ export default function MessagesPage() {
 
   const rejectCall = async () => {
     if (!incomingCall) return
-    await sendSignal('call-reject', incomingCall.fromUserId, {})
+    await sendSignal('call-reject', incomingCall.fromUserId, {}).catch(() => {})
     // Gửi tin nhắn cuộc gọi nhỡ vào chat của người nhận
     const cType = incomingCall.callType
     const callerId = incomingCall.fromUserId
