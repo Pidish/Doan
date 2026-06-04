@@ -73,6 +73,8 @@ export default function MessagesPage() {
   const [followerIds, setFollowerIds] = useState<Set<string>>(new Set())
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set())
   const [showBlockModal, setShowBlockModal] = useState(false)
+  const [showInfoMenu, setShowInfoMenu] = useState(false)
+  const infoMenuRef = useRef<HTMLDivElement>(null)
   const [blockingLoading, setBlockingLoading] = useState(false)
   const [followLoadingId, setFollowLoadingId] = useState<string | null>(null)
   const [selectedMsg, setSelectedMsg] = useState<string | null>(null)
@@ -283,6 +285,7 @@ export default function MessagesPage() {
     const handler = (e: MouseEvent) => {
       if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) setShowEmojiPicker(false)
       if (plusMenuRef.current && !plusMenuRef.current.contains(e.target as Node)) setShowPlusMenu(false)
+      if (infoMenuRef.current && !infoMenuRef.current.contains(e.target as Node)) setShowInfoMenu(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -1311,22 +1314,34 @@ export default function MessagesPage() {
                 )}
               </motion.button>
 
-              {/* Block / Info */}
-              <motion.button
-                whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}
-                onClick={() => setShowBlockModal(true)}
-                title={isBlockedByMe ? 'Bỏ chặn' : 'Chặn người dùng'}
-                className={`group relative p-2.5 rounded-full transition-all ${isBlockedByMe ? 'text-red-500 bg-red-50 hover:bg-red-100' : 'text-gray-400 hover:bg-gray-100'}`}
-              >
-                <ShieldBan className="w-5 h-5" />
-                <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] bg-gray-800 text-white px-2 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                  {isBlockedByMe ? 'Bỏ chặn' : 'Chặn'}
-                </span>
-              </motion.button>
-
-              <button className="p-2.5 text-gray-400 hover:bg-gray-100 rounded-full transition-colors">
-                <Info className="w-5 h-5" />
-              </button>
+              {/* Info button with dropdown */}
+              <div ref={infoMenuRef} className="relative">
+                <button
+                  onClick={() => setShowInfoMenu(v => !v)}
+                  className={`p-2.5 rounded-full transition-colors ${showInfoMenu ? 'bg-gray-100 text-gray-700' : 'text-gray-400 hover:bg-gray-100'}`}
+                >
+                  <Info className="w-5 h-5" />
+                </button>
+                <AnimatePresence>
+                  {showInfoMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.92, y: 6 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.92, y: 6 }}
+                      transition={{ duration: 0.13 }}
+                      className="absolute right-0 top-full mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden z-30"
+                    >
+                      <button
+                        onClick={() => { setShowInfoMenu(false); setShowBlockModal(true) }}
+                        className={`flex items-center gap-3 w-full px-4 py-3 text-sm transition-colors ${isBlockedByMe ? 'text-gray-600 hover:bg-gray-50' : 'text-red-500 hover:bg-red-50'}`}
+                      >
+                        <ShieldBan className="w-4 h-4 flex-shrink-0" />
+                        {isBlockedByMe ? 'Bỏ chặn người dùng' : 'Chặn người dùng'}
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </div>
 
