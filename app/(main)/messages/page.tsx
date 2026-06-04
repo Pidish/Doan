@@ -46,37 +46,16 @@ const EMOJIS = [
   '🎵','🍕','🍜','☕','🚀','💡','🎯','🌈','😜','🫡',
 ]
 
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    // STUN — discover public IP
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    // TURN primary — freestun.net (free, no registration needed)
-    {
-      urls: [
-        'stun:freestun.net:3478',
-        'turn:freestun.net:3478',
-        'turns:freestun.net:5349',
-      ],
-      username: 'free',
-      credential: 'free',
-    },
-    // TURN fallback — openrelay.metered.ca
-    {
-      urls: [
-        'turn:openrelay.metered.ca:80',
-        'turn:openrelay.metered.ca:443',
-        'turns:openrelay.metered.ca:443',
-        'turn:openrelay.metered.ca:443?transport=tcp',
-      ],
-      username: 'openrelayproject',
-      credential: 'openrelayproject',
-    },
-  ],
-  // Pre-gather candidates before createOffer/createAnswer to speed up ICE
-  iceCandidatePoolSize: 10,
-}
+// Fallback used only if the /api/ice-servers endpoint fails
+const FALLBACK_ICE: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  {
+    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turns:openrelay.metered.ca:443'],
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+]
 
 export default function MessagesPage() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
@@ -131,6 +110,8 @@ export default function MessagesPage() {
   // Buffer ICE candidates that arrive before remote description is set
   const iceCandidateBuffer = useRef<RTCIceCandidateInit[]>([])
   const remoteStreamRef = useRef<MediaStream | null>(null)
+  // Cache dynamic ICE servers fetched from /api/ice-servers
+  const iceServersRef = useRef<RTCIceServer[] | null>(null)
 
   // Fetch initial data
   useEffect(() => {
@@ -419,8 +400,22 @@ export default function MessagesPage() {
     } catch {}
   }
 
-  const createPeerConnection = useCallback((targetUserId: string) => {
-    const pc = new RTCPeerConnection(ICE_SERVERS)
+  const loadIceServers = async (): Promise<RTCIceServer[]> => {
+    if (iceServersRef.current) return iceServersRef.current
+    const token = localStorage.getItem('accessToken')
+    try {
+      const res = await fetch('/api/ice-servers', { headers: { Authorization: `Bearer ${token}` } })
+      if (res.ok) {
+        const data = await res.json()
+        iceServersRef.current = data.iceServers
+        return data.iceServers as RTCIceServer[]
+      }
+    } catch {}
+    return FALLBACK_ICE
+  }
+
+  const createPeerConnection = useCallback((targetUserId: string, iceServers: RTCIceServer[]) => {
+    const pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 10 })
     peerConnectionRef.current = pc
 
     pc.onicecandidate = (event) => {
@@ -462,7 +457,8 @@ export default function MessagesPage() {
       localStreamRef.current = stream
       if (localVideoRef.current) localVideoRef.current.srcObject = stream
 
-      const pc = createPeerConnection(selectedUser.id)
+      const iceServers = await loadIceServers()
+      const pc = createPeerConnection(selectedUser.id, iceServers)
       stream.getTracks().forEach(track => pc.addTrack(track, stream))
 
       const offer = await pc.createOffer()
@@ -563,7 +559,8 @@ export default function MessagesPage() {
       })
       localStreamRef.current = stream
 
-      const pc = createPeerConnection(incomingCall.fromUserId)
+      const iceServers = await loadIceServers()
+      const pc = createPeerConnection(incomingCall.fromUserId, iceServers)
       stream.getTracks().forEach(track => pc.addTrack(track, stream))
 
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer))
