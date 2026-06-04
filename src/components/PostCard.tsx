@@ -200,9 +200,10 @@ export function PostCard({ post }: PostCardProps) {
       <div className="p-5 md:p-6">
         {/* Repost label */}
         {post.repost && (
-          <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium mb-3 -mt-1">
-            <Repeat2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span className="text-emerald-600 font-semibold">Đã chia sẻ bài viết</span>
+          <div className="flex items-center gap-1.5 text-xs mb-3 -mt-1">
+            <Repeat2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+            <span className="text-gray-400">Đã chia sẻ bài viết của</span>
+            <span className="text-emerald-600 font-semibold truncate">{post.repost!.author.name}</span>
           </div>
         )}
 
