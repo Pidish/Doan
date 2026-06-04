@@ -305,11 +305,19 @@ export function PostCard({ post }: PostCardProps) {
             <span>{commentCount}</span>
           </button>
 
-          {/* Repost count */}
-          <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-sm font-medium ${reposted ? 'text-emerald-600' : 'text-gray-400'}`}>
+          {/* Repost button */}
+          <button
+            onClick={() => { if (!post.repost) setShowRepostModal(true) }}
+            disabled={!!post.repost}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-sm font-medium transition-all active:scale-90 ${
+              reposted ? 'text-emerald-600 bg-emerald-50' :
+              post.repost ? 'text-gray-300 cursor-not-allowed' :
+              'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50'
+            }`}
+          >
             <Repeat2 className="w-4 h-4" />
             <span>{repostCount}</span>
-          </div>
+          </button>
 
           {/* Share */}
           <div ref={shareRef} className="relative">
@@ -472,7 +480,10 @@ export function PostCard({ post }: PostCardProps) {
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <Repeat2 className="w-4 h-4 text-emerald-600" />
-                <span className="font-bold text-gray-900">Đăng lại trên Nexora</span>
+                <span className="font-bold text-gray-900">
+                  Đăng lại bài của{' '}
+                  <span className="text-emerald-600">{post.author.name}</span>
+                </span>
               </div>
               <button onClick={() => setShowRepostModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
                 <X className="w-5 h-5" />
