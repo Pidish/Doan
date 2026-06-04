@@ -177,7 +177,10 @@ export function PostCard({ post }: PostCardProps) {
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov|avi)(\?.*)?$/i.test(url)
 
   const timeAgo = (date: string) => {
-    const diff = Date.now() - new Date(date).getTime()
+    if (!date) return 'vừa xong'
+    const parsed = new Date(date)
+    if (isNaN(parsed.getTime())) return 'vừa xong'
+    const diff = Date.now() - parsed.getTime()
     const mins = Math.floor(diff / 60000)
     const hours = Math.floor(diff / 3600000)
     const days = Math.floor(diff / 86400000)

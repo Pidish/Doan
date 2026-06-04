@@ -518,7 +518,7 @@ export default function HomePage() {
                   id: post.id,
                   content: post.content,
                   image: post.imageUrl,
-                  timestamp: new Date(post.createdAt).toLocaleDateString('vi-VN'),
+                  timestamp: post.createdAt,
                   likes: post._count.likes,
                   comments: post._count.comments,
                   reposts: (post._count as any).reposts ?? 0,
