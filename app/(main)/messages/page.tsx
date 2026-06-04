@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Search, Edit3, Video, Phone, Info, PlusCircle, Image, Smile, Send, Loader2,
   UserPlus, ImageIcon, PhoneOff, PhoneMissed, Mic, MicOff,
-  VideoIcon, VideoOff, Volume2, VolumeX
+  VideoIcon, VideoOff, Volume2, VolumeX, ShieldBan, AlertTriangle
 } from 'lucide-react'
 import PusherClient, { Channel } from 'pusher-js'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -70,6 +70,10 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false)
   const [search, setSearch] = useState('')
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
+  const [followerIds, setFollowerIds] = useState<Set<string>>(new Set())
+  const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set())
+  const [showBlockModal, setShowBlockModal] = useState(false)
+  const [blockingLoading, setBlockingLoading] = useState(false)
   const [followLoadingId, setFollowLoadingId] = useState<string | null>(null)
   const [selectedMsg, setSelectedMsg] = useState<string | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -128,21 +132,37 @@ export default function MessagesPage() {
         const me: User = meData.data
         setCurrentUser(me)
 
-        const [usersRes, followingRes] = await Promise.all([
+        const [usersRes, followingRes, followersRes, blocksRes] = await Promise.all([
           fetch('/api/users', { headers: { Authorization: `Bearer ${token}` } }),
           fetch(`/api/follow/${me.id}/following`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`/api/follow/${me.id}/followers`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/block', { headers: { Authorization: `Bearer ${token}` } }),
         ])
-        const [usersData, followingData] = await Promise.all([usersRes.json(), followingRes.json()])
+        const [usersData, followingData, followersData, blocksData] = await Promise.all([
+          usersRes.json(), followingRes.json(), followersRes.json(), blocksRes.json(),
+        ])
 
         const allUsers: User[] = (usersData.data || []).filter((u: User) => u.id !== me.id)
         allUsersRef.current = allUsers
-        const following: User[] = followingData.data || []
-        const followingIdSet = new Set(following.map((f: User) => f.id))
-        setFollowingIds(followingIdSet)
 
-        const followed = allUsers.filter(u => followingIdSet.has(u.id))
-        const notFollowed = allUsers.filter(u => !followingIdSet.has(u.id))
-        setSuggestedUsers(notFollowed)
+        const following: User[] = followingData.data || []
+        const followers: User[] = followersData.data || []
+        const blockedList: string[] = blocksData.data || []
+
+        const followingIdSet = new Set(following.map((f: User) => f.id))
+        const followerIdSet = new Set(followers.map((f: User) => f.id))
+        const blockedSet = new Set(blockedList)
+
+        setFollowingIds(followingIdSet)
+        setFollowerIds(followerIdSet)
+        setBlockedIds(blockedSet)
+
+        // Only show mutual follows (both follow each other) and not blocked
+        const mutualFollow = allUsers.filter(u =>
+          followingIdSet.has(u.id) && followerIdSet.has(u.id) && !blockedSet.has(u.id)
+        )
+        const notMutual = allUsers.filter(u => !followingIdSet.has(u.id) && !blockedSet.has(u.id))
+        setSuggestedUsers(notMutual)
 
         // Lấy danh sách conversations để sort theo tin nhắn mới nhất
         const convsRes = await fetch('/api/messages/conversations', { headers: { Authorization: `Bearer ${token}` } })
@@ -159,8 +179,8 @@ export default function MessagesPage() {
         }
         setConversationMap(newConvMap)
 
-        // Sort following: có tin nhắn → xếp theo thời gian mới nhất, không có → cuối danh sách
-        const sortedFollowed = [...followed].sort((a, b) => {
+        // Sort mutual-follow users: có tin nhắn → xếp theo thời gian mới nhất
+        const sortedMutual = [...mutualFollow].sort((a, b) => {
           const aTime = newConvMap.get(a.id)?.lastMessageAt ?? ''
           const bTime = newConvMap.get(b.id)?.lastMessageAt ?? ''
           if (!aTime && !bTime) return 0
@@ -168,9 +188,9 @@ export default function MessagesPage() {
           if (!bTime) return -1
           return bTime.localeCompare(aTime)
         })
-        setFollowingUsers(sortedFollowed)
-        if (sortedFollowed.length > 0) {
-          const firstUser = sortedFollowed[0]
+        setFollowingUsers(sortedMutual)
+        if (sortedMutual.length > 0) {
+          const firstUser = sortedMutual[0]
           setSelectedUser(firstUser)
           // Auto-selected conversation counts as read immediately
           localStorage.setItem(`msgLastRead_${firstUser.id}`, new Date().toISOString())
@@ -709,6 +729,36 @@ export default function MessagesPage() {
     })
   }
 
+  const handleToggleBlock = async () => {
+    if (!selectedUser) return
+    const token = localStorage.getItem('accessToken')
+    setBlockingLoading(true)
+    try {
+      const res = await fetch('/api/block', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ blockedId: selectedUser.id }),
+      })
+      const data = await res.json()
+      setBlockedIds(prev => {
+        const next = new Set(prev)
+        if (data.blocked) {
+          next.add(selectedUser.id)
+          // Remove from follow lists since block also unfollows
+          setFollowingIds(f => { const n = new Set(f); n.delete(selectedUser.id); return n })
+          setFollowerIds(f => { const n = new Set(f); n.delete(selectedUser.id); return n })
+          setFollowingUsers(prev => prev.filter(u => u.id !== selectedUser.id))
+        } else {
+          next.delete(selectedUser.id)
+        }
+        return next
+      })
+    } finally {
+      setBlockingLoading(false)
+      setShowBlockModal(false)
+    }
+  }
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedUser || !currentUser) return
     setSending(true)
@@ -787,8 +837,13 @@ export default function MessagesPage() {
   const filteredSuggested = suggestedUsers.filter(filterUser)
 
   const isFollowing = selectedUser ? followingIds.has(selectedUser.id) : false
+  const isMutualFollow = selectedUser
+    ? followingIds.has(selectedUser.id) && followerIds.has(selectedUser.id)
+    : false
+  const isBlockedByMe = selectedUser ? blockedIds.has(selectedUser.id) : false
   const selectedAllowsMessages = selectedUser ? (selectedUser.allowMessages !== false) : true
-  const canChat = isFollowing && selectedAllowsMessages
+  const canChat = isMutualFollow && !isBlockedByMe && selectedAllowsMessages
+  const canCall = isMutualFollow && !isBlockedByMe && callState === 'idle'
 
   const isImageMessage = (msg: string) => msg.startsWith('__img__:')
   const getImageUrl = (msg: string) => msg.replace('__img__:', '')
@@ -1219,23 +1274,22 @@ export default function MessagesPage() {
               <div>
                 <p className="font-bold text-gray-900 text-sm">{selectedUser.name}</p>
                 <p className="text-xs text-gray-400">
-                  {!isFollowing ? 'Chưa theo dõi' : !selectedAllowsMessages ? 'Không nhận tin nhắn' : selectedUser.showOnlineStatus !== false ? 'Đang hoạt động' : 'Ngoại tuyến'}
+                  {isBlockedByMe ? 'Đã bị chặn' : !isMutualFollow ? 'Cần theo dõi lẫn nhau' : !selectedAllowsMessages ? 'Không nhận tin nhắn' : selectedUser.showOnlineStatus !== false ? 'Đang hoạt động' : 'Ngoại tuyến'}
                 </p>
               </div>
             </div>
 
-            {/* Call buttons */}
+            {/* Action buttons */}
             <div className="flex items-center gap-1">
               <motion.button
-                whileHover={{ scale: 1.08 }}
-                whileTap={{ scale: 0.93 }}
+                whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}
                 onClick={() => startCall('audio')}
-                disabled={!isFollowing || callState !== 'idle'}
+                disabled={!canCall}
                 title="Gọi thoại"
-                className={`group relative p-2.5 rounded-full transition-all ${isFollowing && callState === 'idle' ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-300 cursor-not-allowed'}`}
+                className={`group relative p-2.5 rounded-full transition-all ${canCall ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-300 cursor-not-allowed'}`}
               >
                 <Phone className="w-5 h-5" />
-                {isFollowing && callState === 'idle' && (
+                {canCall && (
                   <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] bg-gray-800 text-white px-2 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                     Gọi thoại
                   </span>
@@ -1243,19 +1297,31 @@ export default function MessagesPage() {
               </motion.button>
 
               <motion.button
-                whileHover={{ scale: 1.08 }}
-                whileTap={{ scale: 0.93 }}
+                whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}
                 onClick={() => startCall('video')}
-                disabled={!isFollowing || callState !== 'idle'}
+                disabled={!canCall}
                 title="Gọi video"
-                className={`group relative p-2.5 rounded-full transition-all ${isFollowing && callState === 'idle' ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-300 cursor-not-allowed'}`}
+                className={`group relative p-2.5 rounded-full transition-all ${canCall ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-300 cursor-not-allowed'}`}
               >
                 <Video className="w-5 h-5" />
-                {isFollowing && callState === 'idle' && (
+                {canCall && (
                   <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] bg-gray-800 text-white px-2 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                     Gọi video
                   </span>
                 )}
+              </motion.button>
+
+              {/* Block / Info */}
+              <motion.button
+                whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.93 }}
+                onClick={() => setShowBlockModal(true)}
+                title={isBlockedByMe ? 'Bỏ chặn' : 'Chặn người dùng'}
+                className={`group relative p-2.5 rounded-full transition-all ${isBlockedByMe ? 'text-red-500 bg-red-50 hover:bg-red-100' : 'text-gray-400 hover:bg-gray-100'}`}
+              >
+                <ShieldBan className="w-5 h-5" />
+                <span className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] bg-gray-800 text-white px-2 py-0.5 rounded-md opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                  {isBlockedByMe ? 'Bỏ chặn' : 'Chặn'}
+                </span>
               </motion.button>
 
               <button className="p-2.5 text-gray-400 hover:bg-gray-100 rounded-full transition-colors">
@@ -1264,8 +1330,81 @@ export default function MessagesPage() {
             </div>
           </div>
 
+          {/* Block confirmation modal */}
+          <AnimatePresence>
+            {showBlockModal && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }}
+                onClick={() => setShowBlockModal(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.92, y: 16 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.92, y: 16 }}
+                  transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+                  className="bg-white rounded-3xl p-7 w-full max-w-sm shadow-2xl"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isBlockedByMe ? 'bg-gray-100' : 'bg-red-100'}`}>
+                      {isBlockedByMe
+                        ? <ShieldBan className="w-5 h-5 text-gray-500" />
+                        : <AlertTriangle className="w-5 h-5 text-red-500" />
+                      }
+                    </div>
+                    <h3 className="font-bold text-gray-900 text-lg">
+                      {isBlockedByMe ? `Bỏ chặn ${selectedUser?.name}?` : `Chặn ${selectedUser?.name}?`}
+                    </h3>
+                  </div>
+                  <p className="text-gray-500 text-sm mb-6">
+                    {isBlockedByMe
+                      ? 'Bỏ chặn sẽ cho phép họ nhắn tin lại cho bạn (nếu cả hai vẫn theo dõi nhau).'
+                      : 'Chặn sẽ xóa việc theo dõi lẫn nhau và ngăn hai bên nhắn tin và gọi điện.'}
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowBlockModal(false)}
+                      className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-full font-semibold text-sm hover:bg-gray-50 transition-colors"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      onClick={handleToggleBlock}
+                      disabled={blockingLoading}
+                      className={`flex-1 py-2.5 rounded-full font-bold text-sm transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${isBlockedByMe ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-red-500 text-white hover:bg-red-600'}`}
+                    >
+                      {blockingLoading
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : isBlockedByMe ? 'Bỏ chặn' : 'Chặn'
+                      }
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Notices */}
-          {!isFollowing && (
+          {isBlockedByMe && (
+            <div className="mx-6 mt-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3">
+              <ShieldBan className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <p className="text-sm text-red-600">Bạn đã chặn <span className="font-semibold">{selectedUser.name}</span>. Không thể nhắn tin hay gọi điện.</p>
+              <button onClick={() => setShowBlockModal(true)} className="ml-auto text-xs text-red-500 underline flex-shrink-0">Bỏ chặn</button>
+            </div>
+          )}
+          {!isBlockedByMe && !isMutualFollow && isFollowing && (
+            <div className="mx-6 mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-3">
+              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+              <p className="text-sm text-amber-700">
+                <span className="font-semibold">{selectedUser.name}</span> chưa theo dõi lại bạn. Cần theo dõi lẫn nhau để nhắn tin và gọi điện.
+              </p>
+            </div>
+          )}
+          {!isBlockedByMe && !isMutualFollow && !isFollowing && (
             <div className="mx-6 mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-center justify-between">
               <p className="text-sm text-amber-700">Theo dõi <span className="font-semibold">{selectedUser.name}</span> để bắt đầu trò chuyện</p>
               <button
@@ -1277,7 +1416,7 @@ export default function MessagesPage() {
               </button>
             </div>
           )}
-          {isFollowing && !selectedAllowsMessages && (
+          {!isBlockedByMe && isMutualFollow && !selectedAllowsMessages && (
             <div className="mx-6 mt-4 px-4 py-3 bg-gray-100 border border-gray-200 rounded-2xl">
               <p className="text-sm text-gray-500 text-center"><span className="font-semibold">{selectedUser.name}</span> không nhận tin nhắn trực tiếp</p>
             </div>
@@ -1460,7 +1599,8 @@ export default function MessagesPage() {
                 type="text"
                 placeholder={
                   uploadingImage ? 'Đang gửi ảnh...' :
-                  !isFollowing ? 'Theo dõi để nhắn tin...' :
+                  isBlockedByMe ? 'Đã chặn người dùng này' :
+                  !isMutualFollow ? 'Cần theo dõi lẫn nhau để nhắn tin' :
                   !selectedAllowsMessages ? 'Người dùng không nhận tin nhắn' :
                   'Nhập tin nhắn...'
                 }

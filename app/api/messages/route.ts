@@ -26,6 +26,28 @@ export async function POST(req: NextRequest) {
 
     const senderId = result.payload.id
 
+    // Block check: reject if either party has blocked the other
+    const block = await prisma.block.findFirst({
+      where: {
+        OR: [
+          { blockerId: senderId, blockedId: receiverId },
+          { blockerId: receiverId, blockedId: senderId },
+        ],
+      },
+    })
+    if (block) {
+      return NextResponse.json({ error: 'Cannot send message' }, { status: 403 })
+    }
+
+    // Mutual follow check: both must follow each other
+    const [iFollow, theyFollow] = await Promise.all([
+      prisma.follow.findUnique({ where: { followerId_followingId: { followerId: senderId, followingId: receiverId } } }),
+      prisma.follow.findUnique({ where: { followerId_followingId: { followerId: receiverId, followingId: senderId } } }),
+    ])
+    if (!iFollow || !theyFollow) {
+      return NextResponse.json({ error: 'Mutual follow required' }, { status: 403 })
+    }
+
     // ✅ Lưu vào DB
     const saved = await prisma.message.create({
       data: {
