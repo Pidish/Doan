@@ -305,13 +305,13 @@ export function PostCard({ post }: PostCardProps) {
             <span>{commentCount}</span>
           </button>
 
-          {/* Repost button */}
+          {/* Repost button — disabled only for posts that are themselves reposts */}
           <button
-            onClick={() => { if (!post.repost) setShowRepostModal(true) }}
-            disabled={!!post.repost}
+            onClick={() => setShowRepostModal(true)}
+            disabled={post.repost != null}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-sm font-medium transition-all active:scale-90 ${
               reposted ? 'text-emerald-600 bg-emerald-50' :
-              post.repost ? 'text-gray-300 cursor-not-allowed' :
+              post.repost != null ? 'text-gray-300 cursor-not-allowed' :
               'text-gray-400 hover:text-emerald-600 hover:bg-emerald-50'
             }`}
           >
