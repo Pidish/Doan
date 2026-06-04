@@ -97,8 +97,10 @@ export default function MessagesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const emojiPickerRef = useRef<HTMLDivElement>(null)
   const plusMenuRef = useRef<HTMLDivElement>(null)
-  const localVideoRef = useRef<HTMLVideoElement>(null)
-  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const localVideoRef = useRef<HTMLVideoElement>(null)   // off-screen (audio fallback)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null)  // off-screen (audio fallback)
+  const overlayLocalVideoRef = useRef<HTMLVideoElement>(null)   // visible pip in video overlay
+  const overlayRemoteVideoRef = useRef<HTMLVideoElement>(null)  // visible remote in video overlay
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const callTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -273,21 +275,23 @@ export default function MessagesPage() {
   useEffect(() => { callStateRef.current = callState }, [callState])
   useEffect(() => { incomingCallRef.current = incomingCall }, [incomingCall])
 
-  // Re-apply local + remote streams to overlay video elements when call becomes connected.
-  // ontrack/getUserMedia may fire before the video overlay mounts, so we re-apply here.
+  // Re-apply streams to OVERLAY video elements once the video call overlay mounts.
+  // ontrack / getUserMedia may fire before or after React renders the overlay,
+  // so we retry at 150ms and 700ms to cover both cases.
   useEffect(() => {
-    if (callState === 'connected' && callType === 'video') {
-      const t = setTimeout(() => {
-        if (localVideoRef.current && localStreamRef.current) {
-          localVideoRef.current.srcObject = localStreamRef.current
-        }
-        if (remoteVideoRef.current && remoteStreamRef.current) {
-          remoteVideoRef.current.srcObject = remoteStreamRef.current
-          remoteVideoRef.current.play().catch(() => {})
-        }
-      }, 100)
-      return () => clearTimeout(t)
+    if (callState !== 'connected' || callType !== 'video') return
+    const apply = () => {
+      if (overlayLocalVideoRef.current && localStreamRef.current) {
+        overlayLocalVideoRef.current.srcObject = localStreamRef.current
+      }
+      if (overlayRemoteVideoRef.current && remoteStreamRef.current) {
+        overlayRemoteVideoRef.current.srcObject = remoteStreamRef.current
+        overlayRemoteVideoRef.current.play().catch(() => {})
+      }
     }
+    const t1 = setTimeout(apply, 150)
+    const t2 = setTimeout(apply, 700) // second attempt in case ICE was slow
+    return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [callState, callType])
 
   // Personal channel: nhận tin nhắn từ mọi conversation (kể cả không đang xem)
@@ -426,9 +430,15 @@ export default function MessagesPage() {
 
     pc.ontrack = (event) => {
       remoteStreamRef.current = event.streams[0]
+      // Off-screen element always receives stream (handles audio for audio calls)
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0]
         remoteVideoRef.current.play().catch(() => {})
+      }
+      // Overlay element (only present during video call connected state)
+      if (overlayRemoteVideoRef.current) {
+        overlayRemoteVideoRef.current.srcObject = event.streams[0]
+        overlayRemoteVideoRef.current.play().catch(() => {})
       }
     }
 
@@ -455,6 +465,7 @@ export default function MessagesPage() {
         video: type === 'video',
       })
       localStreamRef.current = stream
+      // off-screen ref always gets the stream; overlay ref gets it via re-apply useEffect
       if (localVideoRef.current) localVideoRef.current.srcObject = stream
 
       const iceServers = await loadIceServers()
@@ -953,14 +964,14 @@ export default function MessagesPage() {
               {callType === 'video' && callState === 'connected' && (
                 <div className="relative w-full h-56 bg-gray-900 overflow-hidden">
                   <video
-                    ref={remoteVideoRef}
+                    ref={overlayRemoteVideoRef}
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute bottom-3 right-3 w-20 h-28 rounded-xl overflow-hidden border-2 border-white/20 shadow-lg">
                     <video
-                      ref={localVideoRef}
+                      ref={overlayLocalVideoRef}
                       autoPlay
                       muted
                       playsInline
