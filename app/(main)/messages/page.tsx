@@ -46,14 +46,36 @@ const EMOJIS = [
   '🎵','🍕','🍜','☕','🚀','💡','🎯','🌈','😜','🫡',
 ]
 
-const ICE_SERVERS = {
+const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
+    // STUN — discover public IP
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    // TURN primary — freestun.net (free, no registration needed)
+    {
+      urls: [
+        'stun:freestun.net:3478',
+        'turn:freestun.net:3478',
+        'turns:freestun.net:5349',
+      ],
+      username: 'free',
+      credential: 'free',
+    },
+    // TURN fallback — openrelay.metered.ca
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turns:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
+  // Pre-gather candidates before createOffer/createAnswer to speed up ICE
+  iceCandidatePoolSize: 10,
 }
 
 export default function MessagesPage() {
@@ -800,9 +822,12 @@ export default function MessagesPage() {
         onChange={handleImageSelect}
       />
 
-      {/* Hidden video elements */}
-      <video ref={localVideoRef} autoPlay muted playsInline className="hidden" />
-      <video ref={remoteVideoRef} autoPlay playsInline className="hidden" />
+      {/* Off-screen video elements — position:fixed+size 0 instead of display:none
+          so browsers don't block audio autoplay on hidden elements */}
+      <video ref={localVideoRef} autoPlay muted playsInline
+        style={{ position: 'fixed', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
+      <video ref={remoteVideoRef} autoPlay playsInline
+        style={{ position: 'fixed', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }} />
 
       {/* ─── INCOMING CALL OVERLAY ─── */}
       <AnimatePresence>
