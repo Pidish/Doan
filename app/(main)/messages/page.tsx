@@ -108,6 +108,7 @@ export default function MessagesPage() {
   const handleCallSignalRef = useRef<((p: { type: string; fromUserId: string; data: Record<string, unknown> }) => void) | null>(null)
   // Buffer ICE candidates that arrive before remote description is set
   const iceCandidateBuffer = useRef<RTCIceCandidateInit[]>([])
+  const remoteStreamRef = useRef<MediaStream | null>(null)
 
   // Fetch initial data
   useEffect(() => {
@@ -201,14 +202,7 @@ export default function MessagesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Receive call signals from GlobalCallReceiver (always-mounted, single Pusher subscription)
-  useEffect(() => {
-    const handler = (e: Event) => {
-      handleCallSignalRef.current?.((e as CustomEvent).detail)
-    }
-    window.addEventListener('nexora:call-signal', handler)
-    return () => window.removeEventListener('nexora:call-signal', handler)
-  }, [])
+  // (call signals are received directly via personalCh.bind below — no window event needed)
 
   // Chat channel
   useEffect(() => {
@@ -276,12 +270,19 @@ export default function MessagesPage() {
   useEffect(() => { callStateRef.current = callState }, [callState])
   useEffect(() => { incomingCallRef.current = incomingCall }, [incomingCall])
 
-  // Re-apply local stream to overlay video element when call becomes connected
+  // Re-apply local + remote streams to overlay video elements when call becomes connected.
+  // ontrack/getUserMedia may fire before the video overlay mounts, so we re-apply here.
   useEffect(() => {
-    if (callState === 'connected' && callType === 'video' && localStreamRef.current) {
+    if (callState === 'connected' && callType === 'video') {
       const t = setTimeout(() => {
-        if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current
-      }, 50)
+        if (localVideoRef.current && localStreamRef.current) {
+          localVideoRef.current.srcObject = localStreamRef.current
+        }
+        if (remoteVideoRef.current && remoteStreamRef.current) {
+          remoteVideoRef.current.srcObject = remoteStreamRef.current
+          remoteVideoRef.current.play().catch(() => {})
+        }
+      }, 100)
       return () => clearTimeout(t)
     }
   }, [callState, callType])
@@ -290,10 +291,8 @@ export default function MessagesPage() {
   useEffect(() => {
     if (!currentUser || !pusherRef.current) return
     const personalCh = pusherRef.current.subscribe(`user-${currentUser.id}`)
-    // Call signals are sent to user-${id} channel (same as personal messages)
+    // Call signals arrive here; GlobalCallReceiver does NOT subscribe on /messages to avoid duplicates
     personalCh.bind('call-signal', (payload: { type: string; fromUserId: string; data: Record<string, unknown> }) => {
-      // Also dispatch window event so GlobalCallReceiver overlay clears if needed
-      window.dispatchEvent(new CustomEvent('nexora:call-signal', { detail: payload }))
       handleCallSignalRef.current?.(payload)
     })
 
@@ -400,8 +399,10 @@ export default function MessagesPage() {
     }
 
     pc.ontrack = (event) => {
+      remoteStreamRef.current = event.streams[0]
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0]
+        remoteVideoRef.current.play().catch(() => {})
       }
     }
 
@@ -568,6 +569,7 @@ export default function MessagesPage() {
 
   const endCall = async (fromRemote = false) => {
     iceCandidateBuffer.current = []
+    remoteStreamRef.current = null
     const wasConnected = callStateRef.current === 'connected'
     const duration = callDurationRef.current
     const cType = callTypeRef.current

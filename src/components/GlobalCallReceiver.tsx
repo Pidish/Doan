@@ -33,9 +33,12 @@ export function GlobalCallReceiver() {
       .catch(() => {})
   }, [])
 
-  // Subscribe to personal call channel
+  // Subscribe to personal call channel — only when NOT on /messages
+  // (messages page has its own personalCh subscription; two clients on the same channel
+  // would deliver every signal twice, corrupting the WebRTC state machine)
   useEffect(() => {
     if (!currentUserId) return
+    if (pathname.startsWith('/messages')) return
 
     const pusher = new PusherClient(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
       cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
@@ -44,12 +47,6 @@ export function GlobalCallReceiver() {
     const ch = pusher.subscribe(`user-${currentUserId}`)
 
     ch.bind('call-signal', (payload: { type: string; fromUserId: string; data: Record<string, unknown> }) => {
-      // Always forward to messages page (or any listener) via window event
-      window.dispatchEvent(new CustomEvent('nexora:call-signal', { detail: payload }))
-
-      // Show overlay UI only when NOT on messages page (messages page has its own full UI)
-      if (window.location.pathname.startsWith('/messages')) return
-
       if (payload.type === 'call-offer') {
         setIncomingCall({
           fromUserId: payload.fromUserId,
@@ -67,7 +64,7 @@ export function GlobalCallReceiver() {
       ch.unbind_all()
       pusher.disconnect()
     }
-  }, [currentUserId])
+  }, [currentUserId, pathname])
 
   // Clear overlay if user navigates to messages page
   useEffect(() => {
