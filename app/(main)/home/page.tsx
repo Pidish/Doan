@@ -30,7 +30,14 @@ interface Post {
   _count: {
     likes: number
     comments: number
+    reposts: number
   }
+  repost?: {
+    id: string
+    content: string
+    createdAt: string
+    author: { id: string; name: string; email: string; avatar?: string }
+  } | null
 }
 
 export default function HomePage() {
@@ -523,9 +530,9 @@ export default function HomePage() {
                   timestamp: post.createdAt,
                   likes: post._count.likes,
                   comments: post._count.comments,
-                  reposts: (post._count as any).reposts ?? 0,
+                  reposts: post._count.reposts ?? 0,
                   isLiked: post.isLiked,
-                  repost: (post as any).repost ?? null,
+                  repost: post.repost ?? null,
                   author: {
                     id: post.author.id,
                     name: post.author.name,
