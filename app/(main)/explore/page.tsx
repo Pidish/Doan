@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { Search, Heart, MessageCircle, Bookmark, Loader2, X, Sparkles } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -89,17 +90,29 @@ function LoginModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// Reverse map: API category code → display name
+const categoryCodeToName: Record<string, string> = Object.fromEntries(
+  Object.entries(categoryMap).map(([k, v]) => [v, k])
+)
+
 export default function ExplorePage() {
+  const searchParams = useSearchParams()
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [activeCategory, setActiveCategory] = useState('Dành cho bạn')
   const [showLoginModal, setShowLoginModal] = useState(false)
   const [isGuest] = useState(() =>
     typeof window !== 'undefined' ? !window.localStorage.getItem('accessToken') : false
   )
 
   const categories = ['Dành cho bạn', 'Tĩnh lặng', 'Sống xanh', 'Sáng tạo', 'Tâm lý học']
+
+  // Pre-select category from ?category= query param (e.g. from trending sidebar)
+  const initialCategory = (() => {
+    const code = searchParams?.get('category')
+    return code ? (categoryCodeToName[code] ?? 'Dành cho bạn') : 'Dành cho bạn'
+  })()
+  const [activeCategory, setActiveCategory] = useState(initialCategory)
 
   const fetchPosts = useCallback(async (category: string) => {
     setLoading(true)

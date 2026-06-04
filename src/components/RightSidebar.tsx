@@ -249,10 +249,7 @@ export function RightSidebar() {
             ) : trends.map((t) => (
               <button
                 key={t.category}
-                onClick={() => {
-                  window.dispatchEvent(new CustomEvent('nexora:set-tab', { detail: t.tab }))
-                  if (window.location.pathname !== '/home') router.push(`/home?tab=${t.tab}`)
-                }}
+                onClick={() => router.push(`/explore?category=${t.category}`)}
                 className="w-full text-left px-5 py-3.5 hover:bg-gray-50 active:bg-gray-100 transition-colors group"
               >
                 <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-0.5">{t.sublabel}</p>
@@ -263,7 +260,7 @@ export function RightSidebar() {
           </div>
           <div className="px-5 py-3 border-t border-gray-50">
             <button
-              onClick={() => router.push('/home')}
+              onClick={() => router.push('/explore')}
               className="text-xs text-emerald-700 font-semibold hover:underline"
             >
               Xem thêm xu hướng
