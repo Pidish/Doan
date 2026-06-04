@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bell, UserPlus, Heart, AtSign, Loader2, Check, ShieldAlert } from 'lucide-react'
+import { useRequireAuth } from '@/src/hooks/useRequireAuth'
 import { motion } from 'framer-motion'
 
 interface Notification {
@@ -20,6 +21,7 @@ interface Notification {
 }
 
 export default function NotificationsPage() {
+  useRequireAuth()
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)

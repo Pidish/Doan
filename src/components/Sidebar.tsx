@@ -25,6 +25,10 @@ interface ToastNotif {
 
 export function Sidebar() {
   const pathname = usePathname()
+  // Determined once at mount — no effect needed (layout has suppressHydrationWarning)
+  const [isGuest] = useState(() =>
+    typeof window !== 'undefined' ? !window.localStorage.getItem('accessToken') : false
+  )
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const [unreadMessages, setUnreadMessages] = useState(0)
@@ -166,52 +170,89 @@ export function Sidebar() {
           <p className="text-[10px] font-medium text-emerald-800/60 uppercase tracking-widest mt-1">Digital Sanctuary</p>
         </div>
 
-        {/* Nav */}
-        <nav className="flex flex-col gap-1 px-4">
-          {navItems.map((item) => {
-            const isActive = pathname === item.path
-            return (
+        {isGuest ? (
+          /* ── Guest nav ── */
+          <>
+            <nav className="flex flex-col gap-1 px-4">
               <Link
-                key={item.path}
-                href={item.path}
+                href="/explore"
                 className={cn(
                   "flex items-center gap-4 px-6 py-3.5 transition-all rounded-full active:scale-95",
-                  isActive
+                  pathname === '/explore'
                     ? "bg-emerald-700 text-white font-bold shadow-sm"
                     : "text-emerald-800/70 hover:bg-emerald-100 font-medium"
                 )}
               >
-                <div className="relative">
-                  <item.icon className="w-5 h-5" />
-                  {item.badge > 0 && (
-                    <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
-                      {item.badge > 99 ? '99+' : item.badge}
-                    </span>
-                  )}
-                </div>
-                <span className="text-sm">{item.label}</span>
+                <Compass className="w-5 h-5" />
+                <span className="text-sm">Khám phá</span>
               </Link>
-            )
-          })}
-        </nav>
+            </nav>
 
-        {/* Account */}
-        <div className="px-4 mt-6">
-          <Link href="/profile" className="flex items-center gap-3 p-4 bg-white/70 rounded-2xl hover:bg-white/90 transition-all shadow-sm border border-emerald-100/50 group">
-            <img
-              src={currentUser?.avatar || `https://i.pravatar.cc/40?u=${currentUser?.id ?? 'me'}`}
-              alt={currentUser?.name || ''}
-              className="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-sm flex-shrink-0"
-            />
-            <div className="overflow-hidden flex-1 min-w-0">
-              <p className="text-xs font-bold text-emerald-900 truncate group-hover:text-emerald-700 transition-colors">{currentUser?.name ?? '...'}</p>
-              <p className="text-[10px] text-emerald-800/50 truncate">@{currentUser?.email?.split('@')[0] ?? ''}</p>
+            <div className="mt-auto px-4 pb-8 flex flex-col gap-3">
+              <p className="text-xs text-emerald-800/50 text-center mb-1">Tham gia để kết nối với mọi người</p>
+              <Link
+                href="/register"
+                className="w-full text-center py-3 bg-emerald-700 text-white rounded-full font-bold text-sm hover:bg-emerald-600 transition-all"
+              >
+                Đăng ký miễn phí
+              </Link>
+              <Link
+                href="/login"
+                className="w-full text-center py-3 border border-emerald-200 text-emerald-800 rounded-full font-semibold text-sm hover:bg-emerald-100 transition-all"
+              >
+                Đăng nhập
+              </Link>
             </div>
-            {currentUser?.showOnlineStatus !== false && (
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mr-1" />
-            )}
-          </Link>
-        </div>
+          </>
+        ) : (
+          /* ── Authenticated nav ── */
+          <>
+            <nav className="flex flex-col gap-1 px-4">
+              {navItems.map((item) => {
+                const isActive = pathname === item.path
+                return (
+                  <Link
+                    key={item.path}
+                    href={item.path}
+                    className={cn(
+                      "flex items-center gap-4 px-6 py-3.5 transition-all rounded-full active:scale-95",
+                      isActive
+                        ? "bg-emerald-700 text-white font-bold shadow-sm"
+                        : "text-emerald-800/70 hover:bg-emerald-100 font-medium"
+                    )}
+                  >
+                    <div className="relative">
+                      <item.icon className="w-5 h-5" />
+                      {item.badge > 0 && (
+                        <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                          {item.badge > 99 ? '99+' : item.badge}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-sm">{item.label}</span>
+                  </Link>
+                )
+              })}
+            </nav>
+
+            <div className="px-4 mt-6">
+              <Link href="/profile" className="flex items-center gap-3 p-4 bg-white/70 rounded-2xl hover:bg-white/90 transition-all shadow-sm border border-emerald-100/50 group">
+                <img
+                  src={currentUser?.avatar || `https://i.pravatar.cc/40?u=${currentUser?.id ?? 'me'}`}
+                  alt={currentUser?.name || ''}
+                  className="w-9 h-9 rounded-full object-cover ring-2 ring-white shadow-sm flex-shrink-0"
+                />
+                <div className="overflow-hidden flex-1 min-w-0">
+                  <p className="text-xs font-bold text-emerald-900 truncate group-hover:text-emerald-700 transition-colors">{currentUser?.name ?? '...'}</p>
+                  <p className="text-[10px] text-emerald-800/50 truncate">@{currentUser?.email?.split('@')[0] ?? ''}</p>
+                </div>
+                {currentUser?.showOnlineStatus !== false && (
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mr-1" />
+                )}
+              </Link>
+            </div>
+          </>
+        )}
       </aside>
 
       {/* Toast thông báo realtime */}

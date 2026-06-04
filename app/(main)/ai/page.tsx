@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Send, Bot, Trash2, Loader2, Sparkles, Copy, Check, X } from 'lucide-react'
+import { useRequireAuth } from '@/src/hooks/useRequireAuth'
 
 interface AIMessage {
   id: string
@@ -76,6 +77,7 @@ function renderResponse(text: string) {
 }
 
 export default function AIPage() {
+  useRequireAuth()
   const [messages, setMessages] = useState<AIMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)

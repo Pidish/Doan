@@ -6,6 +6,7 @@ import { PostCard } from '@/src/components/PostCard'
 import { RightSidebar } from '@/src/components/RightSidebar'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Loader2, PenSquare, Sparkles, TrendingUp, ImagePlus, X, Users, Compass, ShieldAlert, Clock, Smile } from 'lucide-react'
+import { useRequireAuth } from '@/src/hooks/useRequireAuth'
 
 const EMOJIS = [
   '😀','😊','😍','🥰','😎','🤩','😄','😁','🎉','❤️',
@@ -33,6 +34,7 @@ interface Post {
 }
 
 export default function HomePage() {
+  useRequireAuth()
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')

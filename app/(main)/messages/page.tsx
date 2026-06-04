@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import PusherClient, { Channel } from 'pusher-js'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useRequireAuth } from '@/src/hooks/useRequireAuth'
 
 interface User {
   id: string
@@ -58,6 +59,7 @@ const FALLBACK_ICE: RTCIceServer[] = [
 ]
 
 export default function MessagesPage() {
+  useRequireAuth()
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [followingUsers, setFollowingUsers] = useState<User[]>([])
   const [suggestedUsers, setSuggestedUsers] = useState<User[]>([])
