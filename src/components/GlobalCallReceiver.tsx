@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import PusherClient from 'pusher-js'
 import { Phone, PhoneOff, VideoIcon } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useRingTone } from '../hooks/useRingTone'
 
 interface PendingCall {
   fromUserId: string
@@ -22,6 +23,9 @@ export function GlobalCallReceiver() {
   const incomingCallRef = useRef<PendingCall | null>(null)
 
   useEffect(() => { incomingCallRef.current = incomingCall }, [incomingCall])
+
+  // Ring when overlay is showing
+  useRingTone(incomingCall !== null)
 
   // Get current user id on mount
   useEffect(() => {

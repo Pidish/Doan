@@ -9,6 +9,7 @@ import {
 import PusherClient, { Channel } from 'pusher-js'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRequireAuth } from '@/src/hooks/useRequireAuth'
+import { useRingTone } from '@/src/hooks/useRingTone'
 
 interface User {
   id: string
@@ -89,6 +90,7 @@ export default function MessagesPage() {
 
   // --- Call state ---
   const [callState, setCallState] = useState<CallState>('idle')
+  useRingTone(callState === 'incoming')
   const [callType, setCallType] = useState<CallType>('audio')
   const [callDuration, setCallDuration] = useState(0)
   const [isMuted, setIsMuted] = useState(false)
